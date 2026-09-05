@@ -14,6 +14,18 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "customEditors": [
+      {
+        "viewType": "entra.applicationEditor",
+        "displayName": "Entra Application Definition",
+        "selector": [
+          {
+            "filenamePattern": "**/*"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
     "viewsContainers": {
       "activitybar": [
         {
@@ -58,6 +70,11 @@
         "title": "Refresh",
         "category": "Entra",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "entra.openApplicationDocument",
+        "title": "Open as Document",
+        "category": "Entra"
       }
     ],
     "menus": {
@@ -92,6 +109,11 @@
         {
           "command": "entra.editConnection",
           "when": "view == entraTree && viewItem =~ /^connection-/",
+          "group": "1_modification"
+        },
+        {
+          "command": "entra.openApplicationDocument",
+          "when": "view == entraTree && viewItem == application",
           "group": "1_modification"
         }
       ]

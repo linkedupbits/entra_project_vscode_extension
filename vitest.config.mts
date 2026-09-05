@@ -23,10 +23,13 @@ export default defineConfig({
         // NonFunctionalRequirements.md's coverage requirement explicitly exempts thin VS Code
         // glue: activation wiring and webview HTML templates. These files are exactly that —
         // their actual decision logic lives in connectionFormLogic.ts, resolveConnectionArg.ts,
-        // and applicationFormLogic.ts respectively, which ARE covered.
+        // and applicationFormLogic.ts respectively, which ARE covered. applicationEditorHtml.ts is
+        // the same kind of exemption (UC042's webview HTML/CSS/JS) — its own lifecycle logic
+        // (save/revert/backup/message-handling) lives in applicationEditorProvider.ts, which is
+        // NOT exempted and is covered by applicationEditorProvider.test.ts.
         'src/extension.ts',
         'src/connections/connectionFormPanel.ts',
-        'src/applications/applicationFormPanel.ts',
+        'src/applications/applicationEditorHtml.ts',
         'src/webview/artifactViewerPanel.ts',
       ],
       thresholds: {

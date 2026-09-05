@@ -1,97 +1,5 @@
-import * as vscode from 'vscode';
 import * as crypto from 'crypto';
-import { ApplicationsBranch } from './applicationsBranch';
-import { ApplicationStore } from './applicationStore';
-import { resolveApplicationSubmit, ApplicationFormInput } from './applicationFormLogic';
 import { ApplicationFiles, AppConfig, RequiredPermission, FederatedCredentialEntry } from './types';
-
-interface SubmitMessage {
-  type: 'submit';
-  input: ApplicationFormInput;
-}
-interface CancelMessage {
-  type: 'cancel';
-}
-type IncomingMessage = SubmitMessage | CancelMessage;
-
-/**
- * UC042 — a structured, editable view of one application's four files (UC040), replacing
- * separately opening each raw file. Saving serializes all four back to disk as YAML — see
- * ApplicationStore for the accepted comment/anchor/unmodelled-field loss this implies. One panel
- * per application folder — clicking an already-open application reveals its existing panel rather
- * than opening a duplicate.
- */
-export class ApplicationFormPanel {
-  private static readonly openPanels = new Map<string, ApplicationFormPanel>();
-
-  private readonly panel: vscode.WebviewPanel;
-
-  static show(store: ApplicationStore, applicationsBranch: ApplicationsBranch, folderUri: vscode.Uri, name: string): void {
-    const key = folderUri.toString();
-    const existing = ApplicationFormPanel.openPanels.get(key);
-    if (existing) {
-      existing.panel.reveal();
-      return;
-    }
-    const created = new ApplicationFormPanel(store, applicationsBranch, folderUri, name);
-    ApplicationFormPanel.openPanels.set(key, created);
-  }
-
-  private constructor(
-    private readonly store: ApplicationStore,
-    private readonly applicationsBranch: ApplicationsBranch,
-    private readonly folderUri: vscode.Uri,
-    private readonly name: string
-  ) {
-    this.panel = vscode.window.createWebviewPanel(
-      'entra.applicationForm',
-      `Application: ${name}`,
-      vscode.ViewColumn.Active,
-      { enableScripts: true }
-    );
-
-    this.panel.onDidDispose(() => {
-      ApplicationFormPanel.openPanels.delete(this.folderUri.toString());
-    });
-
-    this.panel.webview.onDidReceiveMessage((message: IncomingMessage) => void this.handleMessage(message));
-
-    void this.render();
-  }
-
-  private async render(): Promise<void> {
-    const [files, allNames] = await Promise.all([
-      this.store.load(this.folderUri),
-      this.applicationsBranch.listApplicationNames(),
-    ]);
-    const dependencyAppOptions = allNames.filter((name) => name !== this.name);
-    this.panel.webview.html = getHtml(this.name, files, dependencyAppOptions);
-  }
-
-  private async handleMessage(message: IncomingMessage): Promise<void> {
-    if (message.type === 'cancel') {
-      this.panel.dispose();
-      return;
-    }
-
-    const resolution = resolveApplicationSubmit(message.input);
-    if (resolution.kind !== 'ok') {
-      void this.panel.webview.postMessage(resolution);
-      return;
-    }
-
-    try {
-      await this.store.save(this.folderUri, resolution.files);
-      this.panel.dispose();
-      void vscode.window.showInformationMessage(`Saved application "${this.name}".`);
-    } catch (err) {
-      void this.panel.webview.postMessage({
-        type: 'error',
-        message: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-}
 
 function getNonce(): string {
   return crypto.randomBytes(16).toString('base64');
@@ -209,7 +117,14 @@ function federatedCredentialRowsHtml(entries: readonly FederatedCredentialEntry[
     .join('');
 }
 
-function getHtml(name: string, files: ApplicationFiles, dependencyAppOptions: readonly string[]): string {
+/**
+ * UC042 — the structured form's HTML/CSS/client-side script. Thin webview glue (excluded from
+ * coverage, same exemption `applicationFormPanel.ts` had before this was split out of
+ * `applicationEditorProvider.ts`) — the actual decision logic it posts messages to/from lives in
+ * `applicationFormLogic.ts` (validation) and `applicationEditorProvider.ts` (document lifecycle),
+ * both of which are tested directly.
+ */
+export function getHtml(name: string, files: ApplicationFiles, dependencyAppOptions: readonly string[]): string {
   const nonce = getNonce();
   const csp = `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';`;
   const { appConfig, application, federatedCredentials, servicePrincipal } = files;
@@ -322,7 +237,7 @@ function getHtml(name: string, files: ApplicationFiles, dependencyAppOptions: re
 </head>
 <body>
   <h1>Application: ${escapeHtml(name)}</h1>
-  <div class="subtitle">Editing this application's four files as one structured view. Saving writes all four back to disk — comments and other hand-written formatting are not preserved (see UC042); review changes with <code>git diff</code> before committing.</div>
+  <div class="subtitle">Editing this application's four files as one structured view. Saving writes all four back to disk — comments and other hand-written formatting are not preserved (see UC042); review changes with <code>git diff</code> before committing. This tab shows VS Code's normal unsaved-changes indicator while you have edits pending.</div>
 
   <form id="form">
     <label for="applicationName">Application name</label>
@@ -408,7 +323,7 @@ function getHtml(name: string, files: ApplicationFiles, dependencyAppOptions: re
 
     <div class="actions">
       <button type="submit" class="primary">Save</button>
-      <button type="button" class="secondary" id="cancelBtn">Cancel</button>
+      <button type="button" class="secondary" id="cancelBtn">Discard unsaved changes</button>
     </div>
   </form>
 
@@ -460,6 +375,7 @@ function getHtml(name: string, files: ApplicationFiles, dependencyAppOptions: re
     function onRemoveClick(row) {
       row.querySelector('.remove-row-btn').addEventListener('click', function () {
         row.remove();
+        notifyEdit();
       });
     }
 
@@ -469,6 +385,7 @@ function getHtml(name: string, files: ApplicationFiles, dependencyAppOptions: re
       row.innerHTML = html;
       container.appendChild(row);
       onRemoveClick(row);
+      notifyEdit();
       return row;
     }
 
@@ -559,9 +476,7 @@ function getHtml(name: string, files: ApplicationFiles, dependencyAppOptions: re
     }
 
     document.querySelectorAll('.remove-row-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () {
-        btn.closest('.row').remove();
-      });
+      onRemoveClick(btn.closest('.row'));
     });
     document.getElementById('addVariableBtn').addEventListener('click', addVariableRow);
     document.getElementById('addEnvironmentBtn').addEventListener('click', addEnvironmentRow);
@@ -589,10 +504,7 @@ function getHtml(name: string, files: ApplicationFiles, dependencyAppOptions: re
       });
     }
 
-    form.addEventListener('submit', function (e) {
-      e.preventDefault();
-      clearErrors();
-
+    function buildInputSnapshot() {
       const variables = Array.from(document.querySelectorAll('.variable-row')).map(function (row) {
         return {
           key: row.querySelector('.var-key').value,
@@ -630,56 +542,68 @@ function getHtml(name: string, files: ApplicationFiles, dependencyAppOptions: re
         };
       });
 
-      vscode.postMessage({
-        type: 'submit',
-        input: {
-          application_name: applicationNameInput.value,
-          business_unit: businessUnitInput.value,
-          variables: variables,
-          environments: environments,
-          dependencies: dependencies,
-          application: {
-            displayName: document.getElementById('displayName').value,
-            signInAudience: document.getElementById('signInAudience').value,
-            redirectUris: collectStringList(redirectUriRows, 'redirecturi-value'),
-            requiredPermissions: requiredPermissions,
-          },
-          federatedCredentials: federatedCredentials,
-          servicePrincipal: {
-            appId: document.getElementById('appId').value,
-            appRoleAssignmentRequired: document.getElementById('appRoleAssignmentRequired').checked,
-            tags: collectStringList(tagRows, 'tag-value'),
-          },
+      return {
+        application_name: applicationNameInput.value,
+        business_unit: businessUnitInput.value,
+        variables: variables,
+        environments: environments,
+        dependencies: dependencies,
+        application: {
+          displayName: document.getElementById('displayName').value,
+          signInAudience: document.getElementById('signInAudience').value,
+          redirectUris: collectStringList(redirectUriRows, 'redirecturi-value'),
+          requiredPermissions: requiredPermissions,
         },
-      });
+        federatedCredentials: federatedCredentials,
+        servicePrincipal: {
+          appId: document.getElementById('appId').value,
+          appRoleAssignmentRequired: document.getElementById('appRoleAssignmentRequired').checked,
+          tags: collectStringList(tagRows, 'tag-value'),
+        },
+      };
+    }
+
+    // Notifies the extension host of the current form state on every relevant change, so the
+    // document is marked dirty (VS Code's native "unsaved changes" tab indicator) as soon as
+    // anything differs from what's on disk — not only when Save is explicitly clicked.
+    function notifyEdit() {
+      vscode.postMessage({ type: 'edit', input: buildInputSnapshot() });
+    }
+    form.addEventListener('input', notifyEdit);
+    form.addEventListener('change', notifyEdit);
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      clearErrors();
+      vscode.postMessage({ type: 'submit', input: buildInputSnapshot() });
     });
 
     window.addEventListener('message', function (event) {
       const message = event.data;
-      if (message.type === 'missingApplicationName') {
+      if (message.kind === 'missingApplicationName') {
         applicationNameError.classList.add('visible');
-      } else if (message.type === 'missingVariableKey') {
+      } else if (message.kind === 'missingVariableKey') {
         variablesError.textContent = 'Every variable needs a key (remove any row you don\\'t need).';
         variablesError.classList.add('visible');
-      } else if (message.type === 'duplicateVariableKey') {
+      } else if (message.kind === 'duplicateVariableKey') {
         variablesError.textContent = 'The variable key "' + message.key + '" is used more than once.';
         variablesError.classList.add('visible');
-      } else if (message.type === 'missingEnvironmentName') {
+      } else if (message.kind === 'missingEnvironmentName') {
         environmentsError.textContent = 'Every environment needs a name (remove any row you don\\'t need).';
         environmentsError.classList.add('visible');
-      } else if (message.type === 'duplicateEnvironmentName') {
+      } else if (message.kind === 'duplicateEnvironmentName') {
         environmentsError.textContent = 'The environment name "' + message.name + '" is used more than once.';
         environmentsError.classList.add('visible');
-      } else if (message.type === 'missingDependencyKey') {
+      } else if (message.kind === 'missingDependencyKey') {
         dependenciesError.textContent = 'Every dependency needs a reference key (remove any row you don\\'t need).';
         dependenciesError.classList.add('visible');
-      } else if (message.type === 'missingDependencyAppName') {
+      } else if (message.kind === 'missingDependencyAppName') {
         dependenciesError.textContent = 'The dependency "' + message.key + '" needs an application selected.';
         dependenciesError.classList.add('visible');
-      } else if (message.type === 'duplicateDependencyKey') {
+      } else if (message.kind === 'duplicateDependencyKey') {
         dependenciesError.textContent = 'The dependency reference key "' + message.key + '" is used more than once.';
         dependenciesError.classList.add('visible');
-      } else if (message.type === 'reservedTagPrefix') {
+      } else if (message.kind === 'reservedTagPrefix') {
         tagsError.textContent =
           'The tag "' + message.tag + '" starts with the reserved prefix "' + message.prefix +
           '", which is generated automatically at deploy time (see the preview above). Remove or rename this custom tag.';

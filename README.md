@@ -17,8 +17,10 @@ tenant via Microsoft Graph.
   `ServicePrincipal.yaml.j2`) modelling one logical application's App Registration, Service
   Principal, and Federated Credentials, parameterised with [Nunjucks](https://mozilla.github.io/nunjucks/)
   (a Jinja2-compatible templating engine) so the same definition can later be rendered and deployed
-  to multiple environments/tenants. The extension provides a structured, validating webview for
-  browsing and editing these — actually rendering/deploying them to a tenant is a later phase.
+  to multiple environments/tenants. The extension provides a structured, validating editor (a VS
+  Code Custom Editor tab, with the same native unsaved-changes/save/revert behavior as any other
+  file) for browsing and editing these — actually rendering/deploying them to a tenant is a later
+  phase.
 - **One tree, two roots.** A single "Entra" activity bar view shows **Connections** (live, via
   Graph) and **Project** (local, reads the workspace's `entra/` folder) side by side.
 

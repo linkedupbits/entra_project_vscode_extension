@@ -70,7 +70,7 @@ export interface ApplicationFields {
  * `audiences` is a list in the Graph shape (and stays one on disk), but is edited here as a
  * single comma-separated field rather than its own nested dynamic list — the overwhelmingly
  * common case is exactly one audience, and comma-splitting still round-trips more than one
- * without needing a second level of nested UI (see ApplicationFormPanel).
+ * without needing a second level of nested UI (see UC042's editor, `applicationEditorHtml.ts`).
  */
 export interface FederatedCredentialEntry {
   name: string;
@@ -230,6 +230,40 @@ export function groupRequiredPermissions(rows: readonly RequiredPermission[]): A
     byResource.get(row.resourceAppId)!.push({ id: row.id, type: row.type });
   }
   return order.map((resourceAppId) => ({ resourceAppId, resourceAccess: byResource.get(resourceAppId)! }));
+}
+
+/**
+ * Builds the exact Graph JSON shape for Application.yaml.j2 from the form's flat
+ * `requiredPermissions` rows — see RequiredPermission's doc comment above. Empty optional sections
+ * (`web`, `requiredResourceAccess`) are omitted entirely rather than written as `{}`/`[]`. Shared
+ * by `ApplicationStore.save()` and `applicationDocumentContent.ts`'s combined virtual document, so
+ * both editing surfaces write the identical on-disk shape.
+ */
+export function serializeApplication(fields: ApplicationFields): Record<string, unknown> {
+  const result: Record<string, unknown> = {
+    displayName: fields.displayName,
+    signInAudience: fields.signInAudience,
+  };
+  if (fields.redirectUris.length > 0) {
+    result.web = { redirectUris: fields.redirectUris };
+  }
+  const grouped = groupRequiredPermissions(fields.requiredPermissions);
+  if (grouped.length > 0) {
+    result.requiredResourceAccess = grouped;
+  }
+  return result;
+}
+
+/** ServicePrincipal.yaml.j2's Graph JSON shape — see serializeApplication's doc comment for why this is shared/exported. */
+export function serializeServicePrincipal(fields: ServicePrincipalFields): Record<string, unknown> {
+  const result: Record<string, unknown> = {
+    appId: fields.appId,
+    appRoleAssignmentRequired: fields.appRoleAssignmentRequired,
+  };
+  if (fields.tags.length > 0) {
+    result.tags = fields.tags;
+  }
+  return result;
 }
 
 export function normalizeFederatedCredentials(parsed: unknown): FederatedCredentialEntry[] {

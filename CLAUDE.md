@@ -82,7 +82,10 @@ code as it's built:
   code creates a *new* application from scratch, renders its Nunjucks templates, or deploys it just
   because the format is specified); browsing what's already defined (UC041 — **implemented**:
   `applicationsBranch.ts`); and a structured, editable view of an *existing* application's four
-  files (UC042 — **implemented**: `applicationFormPanel.ts`/`applicationFormLogic.ts`/`applicationStore.ts`).
+  files (UC042 — **implemented**: `applicationEditorProvider.ts`/`applicationEditorHtml.ts`/
+  `applicationFormLogic.ts`/`applicationStore.ts`; a second, plain-text combined-document editing
+  surface also exists via `applicationDocumentProvider.ts` — see the "Application definitions"
+  decision below for how the two relate).
 
 **Requirements are kept in sync with the implementation — this is a hard rule, not a nice-to-have.**
 Any change to behavior, the data model, validation, or the UI is done *together with* updating the
@@ -165,12 +168,30 @@ These came out of an explicit planning pass with the user and should not be sile
   in this codebase) rather than constructing one internally, so it stays unit-testable with a fake.
   Because Project's subtree is now more than one level deep, `EntraTreeProvider`'s dispatch grew an
   `owns(element)` check on `ProjectBranch` — a deeper element neither root recognizes is offered to
-  `ProjectBranch` a second time, with the element itself, before falling back to `[]`. Selecting an
-  application's file opens it with the built-in `vscode.open` command, not the shared
-  artifact-viewer webview below — these are hand-authored source files, not a Graph snapshot.
-  Clicking the *application* node itself (not a file) opens UC042's own structured, editable
-  webview instead — a form over all four files at once, distinct from both the raw-file path above
-  and the shared artifact-viewer webview below. All four files are genuinely structured (add/remove
+  `ProjectBranch` a second time, with the element itself, before falling back to `[]`. An
+  application node is a **leaf** (`TreeItemCollapsibleState.None`), not a folder — it does not
+  expand to show its four backing files as separate children (an earlier version did; this was
+  deliberately removed, since UC042's editor below is now the way to see and change all four files
+  at once, and the raw files are still reachable via the "Open as Document" path). Clicking the
+  application node itself opens UC042's editor: a VS Code **Custom Editor** tab
+  (`ApplicationEditorProvider`, view type `entra.applicationEditor`) — not a plain `WebviewPanel` —
+  specifically so the tab gets VS Code's native unsaved-changes dot and participates in native
+  save/revert/close-with-prompt/hot-exit, none of which a plain `WebviewPanel` has any concept of
+  (see UC042 for the full lifecycle and the reasoning behind `CustomDocumentContentChangeEvent`
+  over the fuller, undo/redo-integrated `CustomDocumentEditEvent`). Right-clicking the application
+  node and choosing **Open as Document** instead opens a second, simpler editing surface —
+  `applicationDocumentProvider.ts`'s `vscode.FileSystemProvider`-backed virtual document
+  (`entra-application:` scheme) that combines all four files into one plain YAML text document,
+  getting VS Code's dirty-tracking for free since it's a real `FileSystemProvider`-backed document
+  rather than a webview. The two editing surfaces are independent and read/write the same
+  underlying files through the same `ApplicationStore`; neither is a replacement for the other. The
+  Custom Editor's own virtual identity (`entra-application-editor:` scheme, distinct from the
+  document provider's `entra-application:` scheme so the two never collide over one URI) carries the
+  real folder URI in its **query string**, not its path — VS Code derives a Custom Editor's tab
+  title from the URI's path basename and ignores `webviewPanel.title` entirely (a VS Code
+  limitation, not a choice made here), so the path is kept to just the plain application name
+  (`applicationEditorUri.ts`) purely so the tab reads e.g. "sample-web-app" rather than a
+  URL-encoded folder path. All four files are genuinely structured (add/remove
   rows for every list-shaped field), not raw text areas — this was a deliberate later change from
   an earlier version of this form that kept the three `.yaml.j2` templates as opaque textareas
   specifically to avoid losing comments/Nunjucks syntax on save; the user explicitly overrode that
@@ -188,7 +209,7 @@ These came out of an explicit planning pass with the user and should not be sile
   The Tags area also shows a **read-only, display-only** "Generated tags" preview — four tags
   (`AppName:<Environment>_<businessUnit>_<appName>`, `Environment:{{Environment}}`, `<appName>`,
   `BusinessUnit:<businessUnit>`) computed live in the webview's own JS from the Application
-  name/Business unit inputs as the user types (`updateGeneratedTags()` in `applicationFormPanel.ts`).
+  name/Business unit inputs as the user types (`updateGeneratedTags()` in `applicationEditorHtml.ts`).
   `<Environment>`/`{{Environment}}` are deliberately never substituted — there's no single
   environment value at this point in the form, since one definition renders once per
   `Environments` entry (UC040). This was an explicit product decision, confirmed with the user:
@@ -209,8 +230,8 @@ These came out of an explicit planning pass with the user and should not be sile
   doesn't resolve anything itself. The form's `AppName` field is a `<select>` populated from
   `ApplicationsBranch.listApplicationNames()` (the current application excluded), not free text —
   an explicit product decision so a dependency can't be saved pointing at an application that
-  doesn't exist in the project; `ApplicationFormPanel.show()` therefore takes an `ApplicationsBranch`
-  alongside the `ApplicationStore` it already needed. A stale saved reference (folder since
+  doesn't exist in the project; `ApplicationEditorProvider`'s constructor therefore takes an
+  `ApplicationsBranch` alongside the `ApplicationStore` it already needed. A stale saved reference (folder since
   renamed/deleted) is still rendered as a selectable option so re-saving the form doesn't silently
   drop it. Saving parses-to-object-then-restringifies all four files fresh (`applicationStore.ts`, same
   approach as `connectionStore.ts`), so — documented in UC042, not silently accepted — it drops any
@@ -271,7 +292,9 @@ These came out of an explicit planning pass with the user and should not be sile
   structured body through the same shell. It's keyed by `<connection name>::<object id>` so
   re-selecting the same application reveals/refreshes its existing panel rather than opening a
   duplicate. `artifactViewerPanel.ts` is excluded from coverage as thin webview glue, same as
-  `connectionFormPanel.ts`/`applicationFormPanel.ts` — but `tenantApplicationPreview.ts` and
+  `connectionFormPanel.ts`/`applicationEditorHtml.ts` (UC042's own HTML/CSS/JS template, split out
+  from `applicationEditorProvider.ts` specifically so that file's lifecycle logic — save/revert/
+  backup/message-handling — stays testable and NOT exempted) — but `tenantApplicationPreview.ts` and
   `applicationPreviewHtml.ts` are not, since they hold real logic (the per-section failure
   isolation, the field rendering) rather than VS Code wiring. Still not built: the `_meta` block
   UC020/UC032 describe, "Compare with local file," or support for any artifact category besides

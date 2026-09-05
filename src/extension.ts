@@ -10,7 +10,10 @@ import { downloadApplicationToProject } from './connections/downloadApplicationT
 import { ProjectBranch } from './project/projectBranch';
 import { ApplicationsBranch } from './applications/applicationsBranch';
 import { ApplicationStore } from './applications/applicationStore';
-import { ApplicationFormPanel } from './applications/applicationFormPanel';
+import { ApplicationEditorProvider } from './applications/applicationEditorProvider';
+import { toApplicationEditorUri } from './applications/applicationEditorUri';
+import { ApplicationDocumentProvider } from './applications/applicationDocumentProvider';
+import { APPLICATION_DOCUMENT_SCHEME, toApplicationDocumentUri } from './applications/applicationDocumentUri';
 import { EntraTreeProvider } from './tree/entraTreeProvider';
 import { AuthService } from './auth/authService';
 import { CredentialStore } from './auth/credentialStore';
@@ -41,6 +44,27 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   registerStatusBar(context, authService, connectionStore);
+
+  context.subscriptions.push(
+    vscode.workspace.registerFileSystemProvider(APPLICATION_DOCUMENT_SCHEME, new ApplicationDocumentProvider(applicationStore), {
+      isCaseSensitive: true,
+    }),
+    // UC042 — a Custom Editor (not a plain WebviewPanel) so its tab shows VS Code's native
+    // unsaved-changes indicator; `retainContextWhenHidden` keeps the webview's live DOM (and thus
+    // any unsaved in-progress edits) alive while the tab is hidden, rather than re-rendering from
+    // last-saved disk content when the user switches back to it. The `entra.applicationEditor`
+    // viewType must also be declared under package.json's `contributes.customEditors` — VS Code
+    // requires that to accept this registration. Its `selector` is a broad `**/*` with
+    // `priority: "option"` rather than something matching our virtual URIs specifically: this
+    // editor is only ever opened explicitly (`vscode.openWith` from `entra.viewApplication`), never
+    // by VS Code auto-selecting a default editor for a real file, so "option" (never auto-picked)
+    // is what keeps the broad pattern from hijacking unrelated files.
+    vscode.window.registerCustomEditorProvider(
+      ApplicationEditorProvider.viewType,
+      new ApplicationEditorProvider(applicationStore, applicationsBranch),
+      { webviewOptions: { retainContextWhenHidden: true }, supportsMultipleEditorsPerDocument: false }
+    )
+  );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('entra.addConnection', () => {
@@ -93,8 +117,21 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand('entra.refreshConnections', () => treeProvider.refresh()),
 
-    vscode.commands.registerCommand('entra.viewApplication', (item: { folderUri: vscode.Uri; name: string }) => {
-      ApplicationFormPanel.show(applicationStore, applicationsBranch, item.folderUri, item.name);
+    vscode.commands.registerCommand('entra.viewApplication', (item: { folderUri: vscode.Uri }) => {
+      void vscode.commands.executeCommand(
+        'vscode.openWith',
+        toApplicationEditorUri(item.folderUri),
+        ApplicationEditorProvider.viewType
+      );
+    }),
+
+    // A second, text-based editing surface for a project application, alongside UC042's structured
+    // webview — not a replacement for it. Opens the same four files, combined, as one normal,
+    // savable editor tab backed by ApplicationDocumentProvider.
+    vscode.commands.registerCommand('entra.openApplicationDocument', async (item: { folderUri: vscode.Uri }) => {
+      const documentUri = toApplicationDocumentUri(item.folderUri);
+      const document = await vscode.workspace.openTextDocument(documentUri);
+      await vscode.window.showTextDocument(document);
     }),
 
     // UC034 — the currently implemented instance of UC032's generic artifact preview, scoped to

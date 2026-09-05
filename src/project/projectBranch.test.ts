@@ -5,7 +5,6 @@ import { ApplicationsBranch, ApplicationItem } from '../applications/application
 function fakeApplicationsBranch(): ApplicationsBranch {
   return {
     getChildren: vi.fn(async () => []),
-    getFiles: vi.fn(async () => []),
   } as unknown as ApplicationsBranch;
 }
 
@@ -32,10 +31,10 @@ describe('ProjectBranch', () => {
     expect(branch.owns(new ProjectRootItem())).toBe(false);
   });
 
-  it('owns an ApplicationItem', () => {
+  it('does not own an ApplicationItem — it is a leaf with no children to delegate to', () => {
     const branch = new ProjectBranch(fakeApplicationsBranch());
     const appItem = new ApplicationItem({ fsPath: '/x' } as never, 'sample');
-    expect(branch.owns(appItem)).toBe(true);
+    expect(branch.owns(appItem)).toBe(false);
   });
 
   it('delegates the Applications root to ApplicationsBranch.getChildren', async () => {
@@ -48,19 +47,16 @@ describe('ProjectBranch', () => {
     expect(applicationsBranch.getChildren).toHaveBeenCalledTimes(1);
   });
 
-  it('delegates an ApplicationItem to ApplicationsBranch.getFiles', async () => {
-    const applicationsBranch = fakeApplicationsBranch();
-    const branch = new ProjectBranch(applicationsBranch);
-    const appItem = new ApplicationItem({ fsPath: '/x' } as never, 'sample');
-
-    await branch.getChildren(appItem);
-
-    expect(applicationsBranch.getFiles).toHaveBeenCalledWith(appItem);
-  });
-
   it('returns no children for an unrecognised element', async () => {
     const branch = new ProjectBranch(fakeApplicationsBranch());
     const children = await branch.getChildren(new ProjectRootItem());
+    expect(children).toEqual([]);
+  });
+
+  it('returns no children for an ApplicationItem', async () => {
+    const branch = new ProjectBranch(fakeApplicationsBranch());
+    const appItem = new ApplicationItem({ fsPath: '/x' } as never, 'sample');
+    const children = await branch.getChildren(appItem);
     expect(children).toEqual([]);
   });
 });

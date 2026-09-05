@@ -5,11 +5,12 @@ import {
   emptyAppConfig,
   emptyApplicationFields,
   emptyServicePrincipalFields,
-  groupRequiredPermissions,
   normalizeAppConfig,
   normalizeApplicationFields,
   normalizeFederatedCredentials,
   normalizeServicePrincipalFields,
+  serializeApplication,
+  serializeServicePrincipal,
 } from './types';
 
 const APP_CONFIG_FILE = 'AppConfig.yaml';
@@ -27,37 +28,6 @@ async function readYamlOrDefault<T>(uri: vscode.Uri, normalize: (parsed: unknown
     }
     throw err;
   }
-}
-
-/**
- * Builds the exact Graph JSON shape for Application.yaml.j2 from the form's flat
- * `requiredPermissions` rows — see RequiredPermission's doc comment in types.ts. Empty optional
- * sections (`web`, `requiredResourceAccess`) are omitted entirely rather than written as `{}`/`[]`.
- */
-function serializeApplication(fields: ApplicationFiles['application']): Record<string, unknown> {
-  const result: Record<string, unknown> = {
-    displayName: fields.displayName,
-    signInAudience: fields.signInAudience,
-  };
-  if (fields.redirectUris.length > 0) {
-    result.web = { redirectUris: fields.redirectUris };
-  }
-  const grouped = groupRequiredPermissions(fields.requiredPermissions);
-  if (grouped.length > 0) {
-    result.requiredResourceAccess = grouped;
-  }
-  return result;
-}
-
-function serializeServicePrincipal(fields: ApplicationFiles['servicePrincipal']): Record<string, unknown> {
-  const result: Record<string, unknown> = {
-    appId: fields.appId,
-    appRoleAssignmentRequired: fields.appRoleAssignmentRequired,
-  };
-  if (fields.tags.length > 0) {
-    result.tags = fields.tags;
-  }
-  return result;
 }
 
 /**

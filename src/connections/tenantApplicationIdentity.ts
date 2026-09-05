@@ -25,7 +25,7 @@ export interface ApplicationDownloadTarget {
 
 /**
  * Parses the `AppName:<Environment>_<BusinessUnit>_<AppName>` tag UC042's Generated tags preview
- * describes (see `applicationFormPanel.ts`'s `updateGeneratedTags()`) back into its three parts,
+ * describes (see `applicationEditorHtml.ts`'s `updateGeneratedTags()`) back into its three parts,
  * from a Service Principal's real, deployed `tags` list — this is how UC034/UC035 identify which
  * local application-definition folder a tenant application corresponds to, and which environment
  * it represents. When this returns undefined, UC035 A4 falls back to asking the user directly

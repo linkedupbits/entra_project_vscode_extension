@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import * as vscode from 'vscode';
+import { TreeItemCollapsibleState } from '../test/vscodeMock';
 import { ApplicationsBranch, ApplicationsRootItem, ApplicationItem } from './applicationsBranch';
 
 vi.mock('../workspacePaths', () => ({
@@ -89,6 +90,17 @@ describe('ApplicationsBranch.getChildren', () => {
       '/repo/entra/applications/sample-web-app'
     );
   });
+
+  it('is a leaf node — it no longer expands to show its backing files', async () => {
+    givenApplicationsRoot();
+    vi.mocked(vscode.workspace.fs.readDirectory).mockResolvedValueOnce([
+      ['sample-web-app', vscode.FileType.Directory],
+    ] as never);
+
+    const [app] = (await new ApplicationsBranch().getChildren()) as ApplicationItem[];
+
+    expect(app.collapsibleState).toBe(TreeItemCollapsibleState.None);
+  });
 });
 
 describe('ApplicationsBranch.listApplicationNames', () => {
@@ -117,61 +129,3 @@ describe('ApplicationsBranch.listApplicationNames', () => {
   });
 });
 
-describe('ApplicationsBranch.getFiles', () => {
-  const appFolderUri = { fsPath: '/repo/entra/applications/sample-web-app', toString: () => '/repo/entra/applications/sample-web-app' };
-
-  it('shows a placeholder when the application folder is empty', async () => {
-    vi.mocked(vscode.workspace.fs.readDirectory).mockResolvedValueOnce([]);
-    const app = new ApplicationItem(appFolderUri as never, 'sample-web-app');
-
-    const children = await new ApplicationsBranch().getFiles(app);
-
-    expect(children).toHaveLength(1);
-    expect(children[0].contextValue).toBe('applicationEmptyPlaceholder');
-  });
-
-  it('lists files in UC040 canonical order, ignoring subfolders', async () => {
-    vi.mocked(vscode.workspace.fs.readDirectory).mockResolvedValueOnce([
-      ['ServicePrincipal.yaml.j2', vscode.FileType.File],
-      ['notes', vscode.FileType.Directory],
-      ['AppConfig.yaml', vscode.FileType.File],
-      ['FederatedCredentials.yaml.j2', vscode.FileType.File],
-      ['Application.yaml.j2', vscode.FileType.File],
-    ] as never);
-    const app = new ApplicationItem(appFolderUri as never, 'sample-web-app');
-
-    const children = await new ApplicationsBranch().getFiles(app);
-
-    expect(children.map((c) => c.label)).toEqual([
-      'AppConfig.yaml',
-      'Application.yaml.j2',
-      'FederatedCredentials.yaml.j2',
-      'ServicePrincipal.yaml.j2',
-    ]);
-  });
-
-  it('sorts unrecognised files after the canonical ones, alphabetically', async () => {
-    vi.mocked(vscode.workspace.fs.readDirectory).mockResolvedValueOnce([
-      ['zzz-extra.yaml', vscode.FileType.File],
-      ['AppConfig.yaml', vscode.FileType.File],
-      ['aaa-extra.yaml', vscode.FileType.File],
-    ] as never);
-    const app = new ApplicationItem(appFolderUri as never, 'sample-web-app');
-
-    const children = await new ApplicationsBranch().getFiles(app);
-
-    expect(children.map((c) => c.label)).toEqual(['AppConfig.yaml', 'aaa-extra.yaml', 'zzz-extra.yaml']);
-  });
-
-  it('opens a file with vscode.open when clicked', async () => {
-    vi.mocked(vscode.workspace.fs.readDirectory).mockResolvedValueOnce([['AppConfig.yaml', vscode.FileType.File]] as never);
-    const app = new ApplicationItem(appFolderUri as never, 'sample-web-app');
-
-    const [fileItem] = await new ApplicationsBranch().getFiles(app);
-
-    const command = fileItem.command as { command: string; title: string; arguments: [{ fsPath: string }] };
-    expect(command.command).toBe('vscode.open');
-    expect(command.title).toBe('Open File');
-    expect(command.arguments[0].fsPath).toBe('/repo/entra/applications/sample-web-app/AppConfig.yaml');
-  });
-});

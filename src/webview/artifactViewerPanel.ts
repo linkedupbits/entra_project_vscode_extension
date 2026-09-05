@@ -13,7 +13,8 @@ interface DownloadMessage {
  * `onDownload` callback, and firing it is the caller's decision entirely (this class just relays
  * the click). One panel per `key` (currently `<connection name>::<object id>` — see UC034) —
  * showing an already-open key again reveals and refreshes that panel instead of opening a
- * duplicate, the same pattern ApplicationFormPanel uses for application folders.
+ * duplicate — UC042's `ApplicationEditorProvider` gets the equivalent behavior for free from VS
+ * Code's own Custom Editor document model instead of implementing it by hand like this class does.
  *
  * `bodyHtml` is caller-supplied content (see UC034's `buildApplicationPreviewHtml`) rendered
  * inside this shell's title/badge/hint/download chrome — this class owns only the chrome and the

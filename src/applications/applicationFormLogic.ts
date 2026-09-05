@@ -22,7 +22,7 @@ export interface EnvironmentRowInput {
   environment_code: string;
 }
 
-/** `appName` is picked from the project's existing application folders, not free text — see ApplicationFormPanel. */
+/** `appName` is picked from the project's existing application folders, not free text — see ApplicationEditorProvider. */
 export interface DependencyRowInput {
   key: string;
   appName: string;
@@ -80,7 +80,7 @@ export type ApplicationSubmitResolution =
   | { kind: 'ok'; files: ApplicationFiles };
 
 /**
- * These are the prefixes UC042's Generated tags preview uses (see ApplicationFormPanel's
+ * These are the prefixes UC042's Generated tags preview uses (see applicationEditorHtml.ts's
  * `updateGeneratedTags()`) — reserved so a custom tag can never collide with, or be mistaken for,
  * one of those deploy-time-applied tags. Case-sensitive, matching the preview's own casing exactly.
  */
