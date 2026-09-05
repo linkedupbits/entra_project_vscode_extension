@@ -163,7 +163,12 @@ These came out of an explicit planning pass with the user and should not be sile
   independent, and that `appId` placeholder resolves from that prior deploy step's result, not from
   `AppConfig.yaml` like the others. Whether `AppConfig.yaml`'s `tenancy_type` should unify with a
   connection's `tenantKind`, and how (or whether) an application definition relates to a downloaded
-  artifact, are both still open — check UC040 before deciding either. Browsing (UC041) is real:
+  artifact, are both still open — check UC040 before deciding either. UC042's editor constrains an
+  Environment row's `tenancy_type` to a **Workforce**/**CIAM** dropdown (`applicationEditorHtml.ts`)
+  rather than free text — the type itself is still a plain `string` (`types.ts`), so this is a UI
+  constraint only, not a schema change, and a row's value that predates this change and matches
+  neither is not specially preserved (same as the Required Permissions Type field's existing
+  Scope/Role dropdown). Browsing (UC041) is real:
   `ProjectBranch` takes an `ApplicationsBranch` via constructor injection (like every other branch
   in this codebase) rather than constructing one internally, so it stays unit-testable with a fake.
   Because Project's subtree is now more than one level deep, `EntraTreeProvider`'s dispatch grew an

@@ -36,7 +36,10 @@ function environmentRowsHtml(appConfig: AppConfig): string {
     <div class="row environment-row">
       <input type="text" class="env-name" placeholder="Name (e.g. Dev)" value="${escapeHtml(env.name)}" />
       <input type="text" class="env-publisherDomain" placeholder="Publisher domain" value="${escapeHtml(env.publisherDomain)}" />
-      <input type="text" class="env-tenancy_type" placeholder="Tenancy type (e.g. ciam)" value="${escapeHtml(env.tenancy_type)}" />
+      <select class="env-tenancy_type">
+        <option value="workforce" ${selectedAttr(env.tenancy_type, 'workforce')}>Workforce</option>
+        <option value="ciam" ${selectedAttr(env.tenancy_type, 'ciam')}>CIAM</option>
+      </select>
       <input type="text" class="env-environment_code" placeholder="Environment code" value="${escapeHtml(env.environment_code)}" />
       <button type="button" class="remove-row-btn" aria-label="Remove">✕</button>
     </div>`
@@ -405,7 +408,10 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
         'row environment-row',
         '<input type="text" class="env-name" placeholder="Name (e.g. Dev)" />' +
           '<input type="text" class="env-publisherDomain" placeholder="Publisher domain" />' +
-          '<input type="text" class="env-tenancy_type" placeholder="Tenancy type (e.g. ciam)" />' +
+          '<select class="env-tenancy_type">' +
+          '<option value="workforce">Workforce</option>' +
+          '<option value="ciam">CIAM</option>' +
+          '</select>' +
           '<input type="text" class="env-environment_code" placeholder="Environment code" />' +
           '<button type="button" class="remove-row-btn" aria-label="Remove">✕</button>'
       );
