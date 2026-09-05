@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { ApplicationsBranch, ApplicationsRootItem, ApplicationItem } from '../applications/applicationsBranch';
 
 export class ProjectRootItem extends vscode.TreeItem {
   constructor() {
@@ -8,21 +9,31 @@ export class ProjectRootItem extends vscode.TreeItem {
   }
 }
 
-class ProjectEmptyPlaceholderItem extends vscode.TreeItem {
-  constructor() {
-    super('No artifacts downloaded yet', vscode.TreeItemCollapsibleState.None);
-    this.contextValue = 'projectEmptyPlaceholder';
-  }
-}
-
 /**
- * UC029/UC033 — supplies the children of the Project root. Reading the local artifacts folder
- * and rendering per-category folders (UC033 main flow) lands with the download feature; this is
- * an empty-state stub until then, per the base-structure + Add Connection/Authenticate scope of
- * this change.
+ * UC029/UC033/UC041 — supplies the children of the Project root. Currently just the Applications
+ * branch (UC040/UC041); downloaded-artifact category folders (UC033 main flow) land with the
+ * download feature.
  */
 export class ProjectBranch {
-  async getChildren(): Promise<vscode.TreeItem[]> {
-    return [new ProjectEmptyPlaceholderItem()];
+  private readonly applicationsRoot = new ApplicationsRootItem();
+
+  constructor(private readonly applicationsBranch: ApplicationsBranch) {}
+
+  /** Whether `element` is one of this branch's own (non-root) items, for EntraTreeProvider's dispatch. */
+  owns(element: vscode.TreeItem): boolean {
+    return element === this.applicationsRoot || element instanceof ApplicationItem;
+  }
+
+  async getChildren(element?: vscode.TreeItem): Promise<vscode.TreeItem[]> {
+    if (!element) {
+      return [this.applicationsRoot];
+    }
+    if (element === this.applicationsRoot) {
+      return this.applicationsBranch.getChildren();
+    }
+    if (element instanceof ApplicationItem) {
+      return this.applicationsBranch.getFiles(element);
+    }
+    return [];
   }
 }

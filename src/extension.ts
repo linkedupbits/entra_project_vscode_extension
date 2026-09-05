@@ -2,6 +2,9 @@ import * as vscode from 'vscode';
 import { ConnectionStore } from './connections/connectionStore';
 import { ConnectionsBranch, ConnectionTreeItem } from './connections/connectionsBranch';
 import { ProjectBranch } from './project/projectBranch';
+import { ApplicationsBranch } from './applications/applicationsBranch';
+import { ApplicationStore } from './applications/applicationStore';
+import { ApplicationFormPanel } from './applications/applicationFormPanel';
 import { EntraTreeProvider } from './tree/entraTreeProvider';
 import { AuthService } from './auth/authService';
 import { CredentialStore } from './auth/credentialStore';
@@ -14,7 +17,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const credentialStore = new CredentialStore(context.secrets);
   const authService = new AuthService(context.secrets, credentialStore);
   const connectionsBranch = new ConnectionsBranch(connectionStore, authService);
-  const projectBranch = new ProjectBranch();
+  const applicationStore = new ApplicationStore();
+  const projectBranch = new ProjectBranch(new ApplicationsBranch());
   const treeProvider = new EntraTreeProvider(connectionsBranch, projectBranch);
 
   const treeView = vscode.window.createTreeView('entraTree', { treeDataProvider: treeProvider });
@@ -78,7 +82,11 @@ export function activate(context: vscode.ExtensionContext): void {
       void vscode.window.showInformationMessage(`Disconnected from "${connection.name}".`);
     }),
 
-    vscode.commands.registerCommand('entra.refreshConnections', () => treeProvider.refresh())
+    vscode.commands.registerCommand('entra.refreshConnections', () => treeProvider.refresh()),
+
+    vscode.commands.registerCommand('entra.viewApplication', (item: { folderUri: vscode.Uri; name: string }) => {
+      ApplicationFormPanel.show(applicationStore, item.folderUri, item.name);
+    })
   );
 }
 

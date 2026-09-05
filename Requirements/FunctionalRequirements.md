@@ -19,3 +19,16 @@ The initial artifact types supported are:
 * Entra External ID (CIAM) user flows and custom authentication extensions
 
 Conditional Access policies are explicitly out of scope for the initial version, as an incorrect change carries a high risk of locking administrators out of a tenant.
+
+## Application definitions
+
+Distinct from the read-only downloaded-artifact snapshots above (a flat, per-object-type mirror of what's already in a tenant — see [UC020](UseCases/UC200_ArtifactSerialisation/UC020_SerializeArtifactToProjectFile.md)), the project structure also supports **application definitions**: a locally-authored, deployable unit that bundles the three Entra objects that make up one logical application — its App Registration, the Enterprise Application (Service Principal) associated with it, and its Federated Credentials — grouped together and parameterised with [Jinja](https://jinja.palletsprojects.com/) templating so the same definition can be rendered and deployed to multiple logical environments/tenants, per the multi-environment goal above.
+
+This is a data-format requirement, specified now so the convention is stable; it is not itself a deploy feature. Actually rendering these templates and submitting the result to Microsoft Graph (the write-back capability referenced above) remains a later phase — see [UC040 — Define an Application](UseCases/UC400_ApplicationManagement/UC040_DefineApplication.md) for the full structure and its remaining open questions.
+
+Each application is a folder of four files:
+
+* `AppConfig.yaml` — not a Graph object mirror, and not itself templated, but the source of the values the other three files' Jinja placeholders resolve to: application-wide metadata, a set of default variables shared across environments, and a list of named target environments (each supplying the values specific to that one deployment target — e.g. its tenant, its Workforce/CIAM type). One application definition with several environments listed here renders and deploys once per environment.
+* `Application.yaml.j2` — a Jinja-templated YAML document modelling the Entra App Registration, structured to mirror the Microsoft Graph JSON body used to create/update it.
+* `FederatedCredentials.yaml.j2` — a Jinja-templated YAML document modelling the application's federated identity credentials, structured to mirror the Microsoft Graph JSON body used to create each one.
+* `ServicePrincipal.yaml.j2` — a Jinja-templated YAML document modelling the Enterprise Application (Service Principal) associated with the App Registration, structured to mirror the Microsoft Graph JSON body used to create/update it.

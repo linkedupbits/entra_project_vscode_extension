@@ -1,0 +1,15 @@
+application_name: sample-web-app
+business_unit: Customer Experience
+
+Variables: &DefaultVariables
+  owner_email: web-team@example.com
+
+Environments:
+  - name: Dev
+    publisherDomain: contoso-dev.onmicrosoft.com
+    tenancy_type: ciam
+    environment_code: dev
+  - name: Test
+    publisherDomain: contoso-test.onmicrosoft.com
+    tenancy_type: ciam
+    environment_code: test

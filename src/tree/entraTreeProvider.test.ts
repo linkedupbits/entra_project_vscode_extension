@@ -9,7 +9,10 @@ describe('EntraTreeProvider', () => {
     const connectionChild = new TreeItem('a connection') as never;
     const projectChild = new TreeItem('a project item') as never;
     const connectionsBranch = { getChildren: vi.fn(async () => [connectionChild]) } as unknown as ConnectionsBranch;
-    const projectBranch = { getChildren: vi.fn(async () => [projectChild]) } as unknown as ProjectBranch;
+    const projectBranch = {
+      getChildren: vi.fn(async () => [projectChild]),
+      owns: vi.fn(() => false),
+    } as unknown as ProjectBranch;
     const provider = new EntraTreeProvider(connectionsBranch, projectBranch);
     return { provider, connectionsBranch, projectBranch, connectionChild, projectChild };
   }
@@ -50,6 +53,17 @@ describe('EntraTreeProvider', () => {
     const { provider } = makeProvider();
     const children = await provider.getChildren(new TreeItem('mystery') as never);
     expect(children).toEqual([]);
+  });
+
+  it('delegates a deeper element the project branch owns back to it, with that element', async () => {
+    const { provider, projectBranch } = makeProvider();
+    vi.mocked(projectBranch.owns).mockReturnValue(true);
+    const deepElement = new TreeItem('an application') as never;
+
+    await provider.getChildren(deepElement);
+
+    expect(projectBranch.owns).toHaveBeenCalledWith(deepElement);
+    expect(projectBranch.getChildren).toHaveBeenCalledWith(deepElement);
   });
 
   it('refresh fires the change event', () => {

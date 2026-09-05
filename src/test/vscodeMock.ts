@@ -52,6 +52,7 @@ export class TreeItem {
   iconPath?: unknown;
   tooltip?: unknown;
   command?: unknown;
+  resourceUri?: unknown;
 
   constructor(
     public label: string,
@@ -73,6 +74,8 @@ export class ThemeColor {
 export class MarkdownString {
   constructor(public value?: string) {}
 }
+
+export const FileType = { Unknown: 0, File: 1, Directory: 2, SymbolicLink: 64 } as const;
 
 export const StatusBarAlignment = { Left: 1, Right: 2 } as const;
 export const ViewColumn = { Active: -1 } as const;
@@ -102,6 +105,7 @@ export const workspace = {
     readFile: vi.fn(),
     writeFile: vi.fn(),
     createDirectory: vi.fn(),
+    readDirectory: vi.fn(),
   },
 };
 
@@ -130,6 +134,7 @@ export function resetVscodeMock(): void {
   workspace.fs.readFile.mockReset();
   workspace.fs.writeFile.mockReset();
   workspace.fs.createDirectory.mockReset();
+  workspace.fs.readDirectory.mockReset();
 
   window.createStatusBarItem.mockReset();
   window.createTreeView.mockReset().mockReturnValue({ dispose: vi.fn() });

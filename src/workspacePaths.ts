@@ -20,3 +20,12 @@ export function getConnectionsFileUri(): vscode.Uri | undefined {
   }
   return vscode.Uri.joinPath(root, 'connections.yaml');
 }
+
+/** Where application definitions live (see UC040) — `<artifactsRoot>/applications/<name>/`. */
+export function getApplicationsRootUri(): vscode.Uri | undefined {
+  const root = getArtifactsRootUri();
+  if (!root) {
+    return undefined;
+  }
+  return vscode.Uri.joinPath(root, 'applications');
+}

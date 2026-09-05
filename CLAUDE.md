@@ -69,6 +69,12 @@ code as it's built:
 - `UseCases/UC300_ArtifactBrowsing/` — the tree control itself (UC029), and
   browsing/downloading/previewing tenant artifacts and viewing the local project structure
   (UC030–UC033).
+- `UseCases/UC400_ApplicationManagement/` — the on-disk structure for a locally-authored,
+  deployable "application definition" (UC040 — **format only, not implemented**: don't assume any
+  code creates a *new* application from scratch, renders its Jinja templates, or deploys it just
+  because the format is specified); browsing what's already defined (UC041 — **implemented**:
+  `applicationsBranch.ts`); and a structured, editable view of an *existing* application's four
+  files (UC042 — **implemented**: `applicationFormPanel.ts`/`applicationFormLogic.ts`/`applicationStore.ts`).
 
 **Requirements are kept in sync with the implementation — this is a hard rule, not a nice-to-have.**
 Any change to behavior, the data model, validation, or the UI is done *together with* updating the
@@ -132,11 +138,61 @@ These came out of an explicit planning pass with the user and should not be sile
 - **Local file format**: one **YAML** file per downloaded artifact, close to the raw Graph schema,
   named `<displayName>__<id>.yaml`, plus a `_meta` block (`sourceConnection` name, tenant ID, Graph
   endpoint/API version, download timestamp). YAML specifically (not JSON) so files support comments.
+- **Application definitions (UC040 format; UC041 browsing; UC042 structured editing — all implemented except the format's actual deploy path)**: a
+  locally-authored, deployable unit distinct from the downloaded-artifact snapshot above — a folder under
+  `<root>/applications/<name>/` of four files. `AppConfig.yaml` isn't templated itself but is where
+  the other three files' Jinja placeholders get their values from: application-wide metadata, a
+  `Variables` block of defaults shared across environments, and an `Environments` list, each entry
+  supplying one deployment target's own values (e.g. `tenancy_type: ciam`) — one render/deploy pass
+  per entry. `Application.yaml.j2`, `FederatedCredentials.yaml.j2`, and `ServicePrincipal.yaml.j2`
+  are each structured to mirror the Graph JSON body needed to create/update that resource. One
+  thing not to silently resolve without revisiting UC040: `ServicePrincipal.yaml.j2`'s `appId` and
+  `FederatedCredentials.yaml.j2`'s parent depend on `Application.yaml.j2` having been deployed
+  first, for the same environment — these three files are sequenced per environment, not
+  independent, and that `appId` placeholder resolves from that prior deploy step's result, not from
+  `AppConfig.yaml` like the others. Whether `AppConfig.yaml`'s `tenancy_type` should unify with a
+  connection's `tenantKind`, and how (or whether) an application definition relates to a downloaded
+  artifact, are both still open — check UC040 before deciding either. Browsing (UC041) is real:
+  `ProjectBranch` takes an `ApplicationsBranch` via constructor injection (like every other branch
+  in this codebase) rather than constructing one internally, so it stays unit-testable with a fake.
+  Because Project's subtree is now more than one level deep, `EntraTreeProvider`'s dispatch grew an
+  `owns(element)` check on `ProjectBranch` — a deeper element neither root recognizes is offered to
+  `ProjectBranch` a second time, with the element itself, before falling back to `[]`. Selecting an
+  application's file opens it with the built-in `vscode.open` command, not the shared
+  artifact-viewer webview below — these are hand-authored source files, not a Graph snapshot.
+  Clicking the *application* node itself (not a file) opens UC042's own structured, editable
+  webview instead — a form over all four files at once, distinct from both the raw-file path above
+  and the shared artifact-viewer webview below. All four files are genuinely structured (add/remove
+  rows for every list-shaped field), not raw text areas — this was a deliberate later change from
+  an earlier version of this form that kept the three `.yaml.j2` templates as opaque textareas
+  specifically to avoid losing comments/Jinja syntax on save; the user explicitly overrode that
+  caution and accepted the tradeoff below. `Application.yaml.j2` is a **Display name** field, a
+  **Sign-in audience** `<select>` (the four real Graph values), a dynamic **Redirect URIs** list,
+  and a dynamic **Required permissions** list — Graph's nested
+  `requiredResourceAccess[].resourceAccess[]` shape is flattened to one flat `RequiredPermission`
+  row (`resourceAppId`/`id`/`type`) per individual permission for editing (`normalizeApplicationFields()`
+  in `src/applications/types.ts`), then regrouped back to the nested shape on save
+  (`groupRequiredPermissions()`) — this avoids a two-level nested dynamic list in the webview.
+  `FederatedCredentials.yaml.j2` is a dynamic list of `name`/`issuer`/`subject`/`description` fields
+  per credential, with `audiences` (a Graph list, but almost always single-valued) edited as one
+  comma-separated text field, split/joined programmatically rather than as a nested list-of-lists.
+  `ServicePrincipal.yaml.j2` is `appId`/`appRoleAssignmentRequired` (checkbox)/a dynamic `tags` list.
+  Saving parses-to-object-then-restringifies all four files fresh (`applicationStore.ts`, same
+  approach as `connectionStore.ts`), so — documented in UC042, not silently accepted — it drops any
+  hand-written comment in any of the four files, the `Variables: &DefaultVariables`-style anchor (or
+  any other YAML anchor/alias), an environment's extra keys beyond the four fixed ones this form
+  exposes, and any `Application`/`FederatedCredentials`/`ServicePrincipal` key this form doesn't
+  model (e.g. `identifierUris`, `appRoles`, `implicitGrantSettings` — already removed from
+  `Example_Project`'s sample data for this reason). This is an explicit, accepted tradeoff: the user
+  directed it, on the basis that a developer reviews the `git diff` this form produces before
+  committing and can re-add anything dropped. Don't "fix" that by inventing a merge/preserve step
+  without deciding it's worth the complexity; it was a deliberate scope call, not an oversight.
 - **One tree, two roots**: the extension exposes a single tree control with exactly two top-level
-  nodes — **Connections** and **Project** — not two separate views. Both roots expand through the
-  same shape (artifact-category folder → artifact-detail item); only where the data comes from
-  differs. See UC029 for the full navigation model, including the already-downloaded indicator that
-  requires cross-referencing between the two roots.
+  nodes — **Connections** and **Project** — not two separate views. Both roots are meant to expand
+  through the same shape (artifact-category folder → artifact-detail item) once downloading exists;
+  today, Project's only real content is the **Applications** node (UC041). See UC029 for the full
+  navigation model, including the already-downloaded indicator that requires cross-referencing
+  between the two roots (not yet implemented, since it needs the downloaded-artifact side too).
 - **Extension host**: must run in the Node extension host, not as a web extension — MSAL's loopback
   listener and local filesystem access both require Node APIs.
 - **Shared artifact viewer**: one webview component renders an artifact regardless of whether it

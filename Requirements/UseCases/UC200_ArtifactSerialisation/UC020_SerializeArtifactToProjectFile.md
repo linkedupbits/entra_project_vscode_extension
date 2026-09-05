@@ -2,7 +2,7 @@
 
 ## Overview
 
-This use case details how a single Entra artifact, once retrieved from Microsoft Graph, is written into the local project structure as a file the user can browse, hand-edit, and commit to source control.
+This use case details how a single Entra artifact, once retrieved from Microsoft Graph, is written into the local project structure as a file the user can browse, hand-edit, and commit to source control. This is a read-only-ish snapshot of what's already deployed — for the separate, locally-authored-for-deployment concept, see [UC040 — Define an Application](../UC400_ApplicationManagement/UC040_DefineApplication.md).
 
 ## Actors
 
@@ -53,3 +53,4 @@ This use case details how a single Entra artifact, once retrieved from Microsoft
 
 * [UC031 — Download Artifact](../UC300_ArtifactBrowsing/UC031_DownloadArtifact.md) — triggers this use case.
 * [UC033 — View Local Project Artifacts](../UC300_ArtifactBrowsing/UC033_ViewLocalProjectArtifacts.md) — consumes its output.
+* [UC040 — Define an Application](../UC400_ApplicationManagement/UC040_DefineApplication.md) — the distinct, deployable-definition counterpart; how the two relate is an open question there, not resolved here.

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This use case details the shape of the single tree control the extension presents in its "Entra" activity bar container, and how a user moves through it to reach any artifact — remote or local. It is the umbrella use case that [UC030 — Browse Tenant Artifacts](UC030_BrowseTenantArtifacts.md) and [UC033 — View Local Project Artifacts](UC033_ViewLocalProjectArtifacts.md) each describe one branch of.
+This use case details the shape of the single tree control the extension presents in its "Entra" activity bar container, and how a user moves through it to reach any artifact — remote or local. It is the umbrella use case that [UC030 — Browse Tenant Artifacts](UC030_BrowseTenantArtifacts.md), [UC033 — View Local Project Artifacts](UC033_ViewLocalProjectArtifacts.md), and [UC041 — Browse Application Definitions](../UC400_ApplicationManagement/UC041_BrowseApplicationDefinitions.md) each describe one branch of.
 
 ## Actors
 
@@ -21,9 +21,11 @@ This use case details the shape of the single tree control the extension present
 2. Expanding **Connections** lists every saved connection (see [UC012 — Add Connection](../UC100_Security/UC012_AddConnection.md)) as a child node, labelled with its friendly name (e.g. "Tenancy 1") and an icon indicating whether it is currently connected or not.
 3. Expanding a connection node shows the fixed set of artifact-category folder nodes for that tenant: App Registrations, Service Principals, Groups, Directory Roles, External ID User Flows, External ID Custom Authentication Extensions (see [UC030](UC030_BrowseTenantArtifacts.md)).
 4. Expanding a category folder shows one artifact-detail item per object in that category.
-5. Expanding **Project** shows the same fixed set of artifact-category folder nodes, this time scoped to the local project structure — no connection or authentication involved.
-6. Expanding a category folder under **Project** shows one artifact-detail item per matching local file (see [UC033](UC033_ViewLocalProjectArtifacts.md)).
-7. Selecting any artifact-detail item, under either root, opens it in the shared artifact-viewer webview (see [UC032 — Preview Artifact Before Download](UC032_PreviewArtifactBeforeDownload.md) for the Connections side, [UC033](UC033_ViewLocalProjectArtifacts.md) for the Project side).
+5. Expanding **Project** currently shows one fixed node, **Applications** (see [UC041 — Browse Application Definitions](../UC400_ApplicationManagement/UC041_BrowseApplicationDefinitions.md)); the same fixed set of artifact-category folder nodes described for Connections, scoped to the local project structure, lands alongside it once downloading is implemented (see [UC033](UC033_ViewLocalProjectArtifacts.md)).
+6. Expanding **Applications** lists each application definition — one child node per subfolder of `<artifactsRoot>/applications/` (see [UC040](../UC400_ApplicationManagement/UC040_DefineApplication.md)/[UC041](../UC400_ApplicationManagement/UC041_BrowseApplicationDefinitions.md)).
+7. Clicking an application node itself (as opposed to expanding it) opens a structured, editable webview of all four of its files — see [UC042 — View Application Details](../UC400_ApplicationManagement/UC042_ViewApplicationDetails.md). Expanding it instead (or as well) lists the individual files found in it (`AppConfig.yaml` and whichever of the three `.yaml.j2` templates exist); selecting one of those opens it as a normal, directly-editable document — not UC042's structured view, and not the shared artifact-viewer webview from step 9 below, since these are hand-authored source files, not a Graph snapshot.
+8. Expanding a downloaded-artifact category folder under **Project** (once implemented) shows one artifact-detail item per matching local file (see [UC033](UC033_ViewLocalProjectArtifacts.md)).
+9. Selecting an artifact-detail item — under a connection (Connections side), or a downloaded artifact under **Project** — opens it in the shared artifact-viewer webview (see [UC032 — Preview Artifact Before Download](UC032_PreviewArtifactBeforeDownload.md) for the Connections side, [UC033](UC033_ViewLocalProjectArtifacts.md) for the Project side). This does not apply to application-definition files (step 7).
 
 ## Alternate Flows
 
@@ -35,8 +37,9 @@ This use case details the shape of the single tree control the extension present
 ### A2 — Empty states
 
 1. **Connections** has no children yet (no connections saved). The extension shows a single inline affordance under it (e.g. "+ Add Connection") that runs [UC012 — Add Connection](../UC100_Security/UC012_AddConnection.md), rather than leaving the node silently empty.
-2. **Project** has no children yet (nothing downloaded, or the artifacts root folder doesn't exist). The extension shows an explanatory placeholder (e.g. "No artifacts downloaded yet") rather than an unexplained empty node.
-3. A category folder, under either root, that has no items is still shown (not hidden) so the user knows that category was checked and is simply empty.
+2. **Applications** has no children yet (`<artifactsRoot>/applications/` doesn't exist, or exists but has no subfolders). The extension shows an explanatory placeholder (e.g. "No applications defined yet") rather than an unexplained empty node — see [UC041](../UC400_ApplicationManagement/UC041_BrowseApplicationDefinitions.md).
+3. An application node has no files in its folder. The extension shows an explanatory placeholder (e.g. "No files in this application yet") under it, the same principle as above.
+4. A category folder, under either root, that has no items is still shown (not hidden) so the user knows that category was checked and is simply empty.
 
 ### A3 — Already-downloaded indicator
 
@@ -55,7 +58,7 @@ This use case details the shape of the single tree control the extension present
 
 ## Postconditions
 
-* Every artifact the extension knows about — whether live in a tenant or already downloaded — is reachable through this one predictable hierarchy: root → (connection | Project) → category folder → artifact detail.
+* Every artifact or application definition the extension knows about — whether live in a tenant, already downloaded, or locally authored — is reachable through this one predictable hierarchy: root → (connection | Project) → category folder → detail.
 
 ## Related
 
@@ -64,3 +67,5 @@ This use case details the shape of the single tree control the extension present
 * [UC030 — Browse Tenant Artifacts](UC030_BrowseTenantArtifacts.md)
 * [UC032 — Preview Artifact Before Download](UC032_PreviewArtifactBeforeDownload.md)
 * [UC033 — View Local Project Artifacts](UC033_ViewLocalProjectArtifacts.md)
+* [UC041 — Browse Application Definitions](../UC400_ApplicationManagement/UC041_BrowseApplicationDefinitions.md)
+* [UC042 — View Application Details](../UC400_ApplicationManagement/UC042_ViewApplicationDetails.md)

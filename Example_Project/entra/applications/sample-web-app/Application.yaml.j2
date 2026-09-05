@@ -1,0 +1,10 @@
+displayName: "Sample Web App ({{ name }})"
+signInAudience: AzureADMyOrg
+web:
+  redirectUris:
+    - "https://{{ environment_code }}.sample-web-app.example.com/signin-oidc"
+requiredResourceAccess:
+  - resourceAppId: "00000003-0000-0000-c000-000000000000" # Microsoft Graph
+    resourceAccess:
+      - id: "e1fe6dd8-ba31-4d61-89e7-88639da4683d" # User.Read
+        type: Scope

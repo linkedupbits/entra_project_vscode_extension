@@ -38,6 +38,9 @@ export class EntraTreeProvider implements vscode.TreeDataProvider<vscode.TreeIte
     if (element === this.projectRoot) {
       return this.projectBranch.getChildren();
     }
+    if (this.projectBranch.owns(element)) {
+      return this.projectBranch.getChildren(element);
+    }
     return [];
   }
 }

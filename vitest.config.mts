@@ -21,11 +21,12 @@ export default defineConfig({
         'src/**/*.test.ts',
         'src/test/**',
         // NonFunctionalRequirements.md's coverage requirement explicitly exempts thin VS Code
-        // glue: activation wiring and webview HTML templates. Both of these files are exactly
-        // that — their actual decision logic lives in connectionFormLogic.ts and
-        // resolveConnectionArg.ts respectively, which ARE covered.
+        // glue: activation wiring and webview HTML templates. These files are exactly that —
+        // their actual decision logic lives in connectionFormLogic.ts, resolveConnectionArg.ts,
+        // and applicationFormLogic.ts respectively, which ARE covered.
         'src/extension.ts',
         'src/connections/connectionFormPanel.ts',
+        'src/applications/applicationFormPanel.ts',
       ],
       thresholds: {
         statements: 95,
