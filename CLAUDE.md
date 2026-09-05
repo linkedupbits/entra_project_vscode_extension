@@ -68,7 +68,11 @@ code as it's built:
 - `UseCases/UC200_ArtifactSerialisation/` — how a Graph object becomes a local file (UC020).
 - `UseCases/UC300_ArtifactBrowsing/` — the tree control itself (UC029), and
   browsing/downloading/previewing tenant artifacts and viewing the local project structure
-  (UC030–UC033).
+  (UC030–UC033). UC030 is **partially implemented**: a connected connection shows a single
+  Applications (App Registrations) folder listing live Graph data; the other five artifact
+  categories, auto-authenticating on expand, manual paging, throttling retry, and per-category
+  permission errors are not — see UC030's own "Implementation status" note before assuming any of
+  its main-flow steps beyond that one category are built.
 - `UseCases/UC400_ApplicationManagement/` — the on-disk structure for a locally-authored,
   deployable "application definition" (UC040 — **format only, not implemented**: don't assume any
   code creates a *new* application from scratch, renders its Nunjucks templates, or deploys it just
@@ -216,10 +220,31 @@ These came out of an explicit planning pass with the user and should not be sile
   without deciding it's worth the complexity; it was a deliberate scope call, not an oversight.
 - **One tree, two roots**: the extension exposes a single tree control with exactly two top-level
   nodes — **Connections** and **Project** — not two separate views. Both roots are meant to expand
-  through the same shape (artifact-category folder → artifact-detail item) once downloading exists;
-  today, Project's only real content is the **Applications** node (UC041). See UC029 for the full
-  navigation model, including the already-downloaded indicator that requires cross-referencing
-  between the two roots (not yet implemented, since it needs the downloaded-artifact side too).
+  through the same shape (artifact-category folder → artifact-detail item); today that shape is
+  real on both sides but only for one category each — **Applications** under Project (UC041, local
+  files) and **Applications** under a connected connection (UC030, live Graph data). See UC029 for
+  the full navigation model, including the already-downloaded indicator that requires
+  cross-referencing between the two roots (not yet implemented, since it needs the
+  downloaded-artifact side too).
+- **Tenant Applications browsing (UC030, partial)**: a `ConnectionTreeItem` is expandable
+  (`Collapsed`) once `authService.isConnected()` is true for it, and a leaf (`None`) otherwise —
+  clicking it still opens Edit Connection either way (UC029 A5), since VS Code treats a click on
+  the label and a click on the expand chevron as independent gestures. Expanding a connected
+  connection shows one fixed child, `TenantApplicationsRootItem` ("Applications"); expanding *that*
+  calls `AuthService.getGraphAccessToken()` (silent for delegated, client-credentials for app-only
+  — reacquired on every expand, not cached separately here, since MSAL's own cache already avoids
+  a redundant network call) and `graphClient.ts`'s `listApplications()`, which follows every
+  `@odata.nextLink` internally before returning — no manual "Load more" UI, unlike UC030's original
+  spec (see UC030 for that trade-off's rationale). `ConnectionsBranch` catches anything that fails
+  along that path (token acquisition or the Graph call itself) and renders a single
+  `tenantApplicationsError` tree item instead of throwing out of `getChildren()`, which would
+  otherwise surface as a silently-empty node. `graphHosts.ts`'s `GRAPH_HOST` map is the one place
+  the three sovereign-cloud Graph hostnames are written down — `authService.ts`'s `GRAPH_RESOURCE`
+  (token audience) and `graphClient.ts`'s REST base URL both derive from it, so a hostname is never
+  duplicated. The other five categories UC030 specifies (Service Principals, Groups, Directory
+  Roles, External ID User Flows/Custom Authentication Extensions), throttling retry, and
+  per-category 403 handling are not implemented — don't assume `ConnectionsBranch` has any of that
+  just because Applications works.
 - **Extension host**: must run in the Node extension host, not as a web extension — MSAL's loopback
   listener and local filesystem access both require Node APIs.
 - **Shared artifact viewer**: one webview component renders an artifact regardless of whether it

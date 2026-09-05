@@ -19,13 +19,13 @@ This use case details the shape of the single tree control the extension present
    * **Connections**
    * **Project**
 2. Expanding **Connections** lists every saved connection (see [UC012 — Add Connection](../UC100_Security/UC012_AddConnection.md)) as a child node, labelled with its friendly name (e.g. "Tenancy 1") and an icon indicating whether it is currently connected or not.
-3. Expanding a connection node shows the fixed set of artifact-category folder nodes for that tenant: App Registrations, Service Principals, Groups, Directory Roles, External ID User Flows, External ID Custom Authentication Extensions (see [UC030](UC030_BrowseTenantArtifacts.md)).
+3. Expanding a connection node shows the fixed set of artifact-category folder nodes for that tenant: App Registrations, Service Principals, Groups, Directory Roles, External ID User Flows, External ID Custom Authentication Extensions (see [UC030](UC030_BrowseTenantArtifacts.md)). **Implemented so far**: only a *connected* connection is expandable at all, and only shows a single **Applications** folder (App Registrations); the other five categories, and auto-authenticating a disconnected connection on expand (A1 below), remain unimplemented.
 4. Expanding a category folder shows one artifact-detail item per object in that category.
 5. Expanding **Project** currently shows one fixed node, **Applications** (see [UC041 — Browse Application Definitions](../UC400_ApplicationManagement/UC041_BrowseApplicationDefinitions.md)); the same fixed set of artifact-category folder nodes described for Connections, scoped to the local project structure, lands alongside it once downloading is implemented (see [UC033](UC033_ViewLocalProjectArtifacts.md)).
 6. Expanding **Applications** lists each application definition — one child node per subfolder of `<artifactsRoot>/applications/` (see [UC040](../UC400_ApplicationManagement/UC040_DefineApplication.md)/[UC041](../UC400_ApplicationManagement/UC041_BrowseApplicationDefinitions.md)).
 7. Clicking an application node itself (as opposed to expanding it) opens a structured, editable webview of all four of its files — see [UC042 — View Application Details](../UC400_ApplicationManagement/UC042_ViewApplicationDetails.md). Expanding it instead (or as well) lists the individual files found in it (`AppConfig.yaml` and whichever of the three `.yaml.j2` templates exist); selecting one of those opens it as a normal, directly-editable document — not UC042's structured view, and not the shared artifact-viewer webview from step 9 below, since these are hand-authored source files, not a Graph snapshot.
 8. Expanding a downloaded-artifact category folder under **Project** (once implemented) shows one artifact-detail item per matching local file (see [UC033](UC033_ViewLocalProjectArtifacts.md)).
-9. Selecting an artifact-detail item — under a connection (Connections side), or a downloaded artifact under **Project** — opens it in the shared artifact-viewer webview (see [UC032 — Preview Artifact Before Download](UC032_PreviewArtifactBeforeDownload.md) for the Connections side, [UC033](UC033_ViewLocalProjectArtifacts.md) for the Project side). This does not apply to application-definition files (step 7).
+9. Selecting an artifact-detail item — under a connection (Connections side), or a downloaded artifact under **Project** — opens it in the shared artifact-viewer webview (see [UC032 — Preview Artifact Before Download](UC032_PreviewArtifactBeforeDownload.md) for the Connections side, [UC033](UC033_ViewLocalProjectArtifacts.md) for the Project side). This does not apply to application-definition files (step 7). **Not implemented for the Connections side yet**: selecting an application item under a connection's Applications folder currently does nothing, since UC032 itself isn't implemented.
 
 ## Alternate Flows
 
@@ -33,6 +33,7 @@ This use case details the shape of the single tree control the extension present
 
 1. User expands a connection node that has no valid cached token.
 2. [UC010 — Authenticate to Entra](../UC100_Security/UC010_AuthenticateToEntra.md) runs before the node's category folders are shown; if authentication fails or is cancelled, the node collapses back to its disconnected state rather than showing an empty/broken expansion.
+3. **Not implemented.** A disconnected connection is currently a leaf node with no expand affordance at all — the user must run `entra.connect` on it explicitly (via its context menu or inline icon) before its Applications folder appears.
 
 ### A2 — Empty states
 

@@ -30,11 +30,13 @@ behind each piece of behavior.
 
 Not all of the above is implemented yet — check before relying on this summary aging well:
 
-- **Implemented**: adding/editing connections and authenticating (delegated and app-only), the
-  Connections tree, and the full application-definition workflow — browsing, and the structured
-  editor for an existing application's four files.
-- **Not yet implemented**: browsing/downloading/previewing live tenant artifacts via Graph, and
-  actually rendering/deploying an application definition to a tenant.
+- **Implemented**: adding/editing connections and authenticating (delegated and app-only); the
+  full application-definition workflow — browsing, and the structured editor for an existing
+  application's four files; and, for a connected connection, an **Applications** folder listing
+  its live App Registrations via Graph.
+- **Not yet implemented**: the other tenant artifact categories (Service Principals, Groups,
+  Directory Roles, External ID user flows/custom auth extensions), previewing/downloading a tenant
+  artifact, and actually rendering/deploying an application definition to a tenant.
 
 [CLAUDE.md](CLAUDE.md) has the full list of architecture decisions and their rationale; the
 [Requirements/](Requirements/) folder is the authoritative source of truth for scope and behavior

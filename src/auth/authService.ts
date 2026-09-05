@@ -4,6 +4,7 @@ import { Connection, Cloud } from '../connections/types';
 import { getAuthMode, getDefaultClientId } from '../config';
 import { SecretStorageCachePlugin, tokenCacheKey } from './secretStorageCachePlugin';
 import { CredentialStore } from './credentialStore';
+import { GRAPH_HOST } from '../graph/graphHosts';
 
 const CLOUD_AUTHORITY_HOST: Record<Cloud, string> = {
   public: 'login.microsoftonline.com',
@@ -12,9 +13,9 @@ const CLOUD_AUTHORITY_HOST: Record<Cloud, string> = {
 };
 
 const GRAPH_RESOURCE: Record<Cloud, string> = {
-  public: 'https://graph.microsoft.com/.default',
-  usGov: 'https://graph.microsoft.us/.default',
-  china: 'https://microsoftgraph.chinacloudapi.cn/.default',
+  public: `https://${GRAPH_HOST.public}/.default`,
+  usGov: `https://${GRAPH_HOST.usGov}/.default`,
+  china: `https://${GRAPH_HOST.china}/.default`,
 };
 
 export interface ConnectedAccount {
@@ -163,6 +164,40 @@ export class AuthService implements vscode.Disposable {
     }
     this.appOnlyConnected.add(connection.name);
     this._onDidChangeConnectionState.fire(connection.name);
+  }
+
+  /**
+   * UC030 — a valid Microsoft Graph access token for a connected connection: reacquired silently
+   * from the cached account for 'delegated' (MSAL handles the refresh-token exchange internally),
+   * or via the client-credentials grant for app-only (MSAL caches that result internally too, so
+   * calling this repeatedly doesn't force a fresh token request each time). Throws rather than
+   * returning undefined if the connection isn't connected — callers are expected to check
+   * isConnected() first, the same precondition UC030 itself states.
+   */
+  async getGraphAccessToken(connection: Connection): Promise<string> {
+    const client = this.clients.get(connection.name);
+    if (!client) {
+      throw new Error(`Not connected to "${connection.name}".`);
+    }
+    const scopes = [GRAPH_RESOURCE[connection.cloud]];
+
+    if (client instanceof msal.ConfidentialClientApplication) {
+      const result = await client.acquireTokenByClientCredential({ scopes });
+      if (!result?.accessToken) {
+        throw new Error(`Could not acquire a Microsoft Graph access token for "${connection.name}".`);
+      }
+      return result.accessToken;
+    }
+
+    const account = this.accounts.get(connection.name);
+    if (!account) {
+      throw new Error(`Not connected to "${connection.name}".`);
+    }
+    const result = await client.acquireTokenSilent({ account, scopes });
+    if (!result?.accessToken) {
+      throw new Error(`Could not acquire a Microsoft Graph access token for "${connection.name}".`);
+    }
+    return result.accessToken;
   }
 
   /** UC011 main flow. */

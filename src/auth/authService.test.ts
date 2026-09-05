@@ -356,6 +356,88 @@ describe('AuthService.connect — app-only (client certificate)', () => {
   });
 });
 
+describe('AuthService.getGraphAccessToken', () => {
+  it('throws when the connection was never connected at all', async () => {
+    const { auth } = makeAuth();
+
+    await expect(auth.getGraphAccessToken(publicConn)).rejects.toThrow(/Not connected to "Contoso Dev"/);
+  });
+
+  it('throws when a delegated connect attempt left a client cached but no account (sign-in never completed)', async () => {
+    vi.mocked(getDefaultClientId).mockReturnValue('client-id');
+    mocks.acquireTokenInteractive.mockResolvedValueOnce({ account: null });
+    const { auth } = makeAuth();
+    await expect(auth.connect(publicConn)).rejects.toThrow(/did not complete/);
+
+    await expect(auth.getGraphAccessToken(publicConn)).rejects.toThrow(/Not connected to "Contoso Dev"/);
+  });
+
+  it('acquires a delegated token silently from the connected account', async () => {
+    vi.mocked(getDefaultClientId).mockReturnValue('client-id');
+    mocks.acquireTokenInteractive.mockResolvedValueOnce({ account: { username: 'me@contoso.com' } });
+    mocks.acquireTokenSilent.mockResolvedValueOnce({ accessToken: 'graph-token' });
+    const { auth } = makeAuth();
+    await auth.connect(publicConn);
+
+    const token = await auth.getGraphAccessToken(publicConn);
+
+    expect(token).toBe('graph-token');
+    expect(mocks.acquireTokenSilent).toHaveBeenCalledWith({
+      account: { username: 'me@contoso.com' },
+      scopes: ['https://graph.microsoft.com/.default'],
+    });
+  });
+
+  it('throws when the delegated silent acquisition does not return an access token', async () => {
+    vi.mocked(getDefaultClientId).mockReturnValue('client-id');
+    mocks.acquireTokenInteractive.mockResolvedValueOnce({ account: { username: 'me@contoso.com' } });
+    mocks.acquireTokenSilent.mockResolvedValueOnce({ accessToken: undefined });
+    const { auth } = makeAuth();
+    await auth.connect(publicConn);
+
+    await expect(auth.getGraphAccessToken(publicConn)).rejects.toThrow(/Could not acquire a Microsoft Graph access token/);
+  });
+
+  it('acquires an app-only token via the client-credentials grant', async () => {
+    vi.mocked(getDefaultClientId).mockReturnValue('client-id');
+    const secretConn: Connection = {
+      name: 'Contoso App',
+      tenantId: 'contoso-tenant',
+      cloud: 'public',
+      authMethod: 'clientSecret',
+    };
+    mocks.acquireTokenByClientCredential.mockResolvedValueOnce({ accessToken: 'app-token' });
+    const { auth, credentials } = makeAuth();
+    await credentials.setClientSecret('Contoso App', 'secret');
+    await auth.connect(secretConn);
+    mocks.acquireTokenByClientCredential.mockResolvedValueOnce({ accessToken: 'app-graph-token' });
+
+    const token = await auth.getGraphAccessToken(secretConn);
+
+    expect(token).toBe('app-graph-token');
+    expect(mocks.acquireTokenByClientCredential).toHaveBeenCalledWith({
+      scopes: ['https://graph.microsoft.com/.default'],
+    });
+  });
+
+  it('throws when the app-only client-credentials grant does not return an access token', async () => {
+    vi.mocked(getDefaultClientId).mockReturnValue('client-id');
+    const secretConn: Connection = {
+      name: 'Contoso App',
+      tenantId: 'contoso-tenant',
+      cloud: 'public',
+      authMethod: 'clientSecret',
+    };
+    mocks.acquireTokenByClientCredential.mockResolvedValueOnce({ accessToken: 'app-token' });
+    const { auth, credentials } = makeAuth();
+    await credentials.setClientSecret('Contoso App', 'secret');
+    await auth.connect(secretConn);
+    mocks.acquireTokenByClientCredential.mockResolvedValueOnce(null);
+
+    await expect(auth.getGraphAccessToken(secretConn)).rejects.toThrow(/Could not acquire a Microsoft Graph access token/);
+  });
+});
+
 describe('AuthService.disconnect', () => {
   it('removes the account from the token cache and clears the cached token secret', async () => {
     vi.mocked(getDefaultClientId).mockReturnValue('client-id');
