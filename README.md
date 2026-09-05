@@ -38,9 +38,10 @@ Not all of the above is implemented yet — check before relying on this summary
   plus a **Download to project** button (asking for an application name if the tenant's Service
   Principal has no `AppName:` identifying tag) that seeds or updates the matching local
   application-definition folder rather than writing a flat downloaded-artifact snapshot. Required
-  permissions in that preview resolve recognised Microsoft Graph permission IDs to their
-  human-readable name (e.g. "Directory.Read.All") via a checked-in, regeneratable lookup table —
-  see [Regenerating Graph permission names](#regenerating-graph-permission-names) below.
+  permissions in that preview render as `Application name : Scope name (Application ID : Scope
+  ID)` — Microsoft Graph resolves from a checked-in, regeneratable lookup table (see
+  [Regenerating Graph permission names](#regenerating-graph-permission-names) below); any other
+  referenced resource application resolves via a live lookup made when the preview loads.
 - **Not yet implemented**: the other tenant artifact categories (Service Principals, Groups,
   Directory Roles, External ID user flows/custom auth extensions), the flat downloaded-artifact
   snapshot format for any category, comparing a preview with a local file, and actually

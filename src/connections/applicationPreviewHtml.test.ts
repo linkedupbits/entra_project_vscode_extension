@@ -9,6 +9,7 @@ function data(overrides: Partial<ApplicationPreviewData> = {}): ApplicationPrevi
       value: { displayName: 'My App', signInAudience: 'AzureADMyOrg', redirectUris: [], requiredPermissions: [] },
     },
     applicationPublisherDomain: '',
+    resourceApplications: {},
     federatedCredentials: { kind: 'ok', value: [] },
     servicePrincipal: { kind: 'ok', value: { appId: '', appRoleAssignmentRequired: false, tags: [] } },
     ...overrides,
@@ -66,10 +67,9 @@ describe('buildApplicationPreviewHtml', () => {
     expect(html).toContain('https://a.example.com/signin-oidc');
     expect(html).toContain('00000003-0000-0000-c000-000000000000');
     expect(html).toContain('perm-1');
-    expect(html).toContain('Scope');
   });
 
-  it('resolves a well-known Microsoft Graph permission to its human-readable name', () => {
+  it('renders "Application name : Scope name (App ID : Scope ID)" for a resolved permission', () => {
     const html = buildApplicationPreviewHtml(
       data({
         application: {
@@ -87,13 +87,20 @@ describe('buildApplicationPreviewHtml', () => {
             ],
           },
         },
+        resourceApplications: {
+          '00000003-0000-0000-c000-000000000000': {
+            displayName: 'Microsoft Graph',
+            permissions: { '7ab1d382-f21e-4acd-a863-ba3e13f7da61': { name: 'Directory.Read.All', type: 'Role' } },
+          },
+        },
       })
     );
-    expect(html).toContain('Directory.Read.All');
+    expect(html).toContain('Microsoft Graph : Directory.Read.All');
+    expect(html).toContain('00000003-0000-0000-c000-000000000000');
     expect(html).toContain('7ab1d382-f21e-4acd-a863-ba3e13f7da61');
   });
 
-  it('still shows the raw IDs for an unrecognised permission, without a resolved name', () => {
+  it('falls back to the raw resourceAppId when the resource itself is unrecognised', () => {
     const html = buildApplicationPreviewHtml(
       data({
         application: {
@@ -107,9 +114,27 @@ describe('buildApplicationPreviewHtml', () => {
         },
       })
     );
-    expect(html).toContain('some-other-api');
-    expect(html).toContain('unknown-id');
-    expect(html).not.toContain('<strong>');
+    expect(html).toContain('some-other-api : unknown-id');
+  });
+
+  it("falls back to the raw permission id when the resource resolved but doesn't expose that id", () => {
+    const html = buildApplicationPreviewHtml(
+      data({
+        application: {
+          kind: 'ok',
+          value: {
+            displayName: 'My App',
+            signInAudience: 'AzureADMyOrg',
+            redirectUris: [],
+            requiredPermissions: [{ resourceAppId: 'some-other-api', id: 'unknown-id', type: 'Scope' }],
+          },
+        },
+        resourceApplications: {
+          'some-other-api': { displayName: 'Some Other API', permissions: {} },
+        },
+      })
+    );
+    expect(html).toContain('Some Other API : unknown-id');
   });
 
   it('renders each federated credential with its fields', () => {

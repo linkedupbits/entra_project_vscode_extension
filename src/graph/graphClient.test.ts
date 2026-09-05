@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { listApplications, getApplication, listFederatedIdentityCredentials, getServicePrincipalByAppId } from './graphClient';
+import {
+  listApplications,
+  getApplication,
+  listFederatedIdentityCredentials,
+  getServicePrincipalByAppId,
+  getResourceApplicationPermissions,
+} from './graphClient';
 
 function jsonResponse(body: unknown, ok = true, status = 200, statusText = 'OK'): Response {
   return {
@@ -319,6 +325,101 @@ describe('getServicePrincipalByAppId', () => {
 
     await expect(getServicePrincipalByAppId('a-token', 'public', 'app-1')).rejects.toThrow(
       /Microsoft Graph returned 500 Internal Server Error looking up the service principal for appId "app-1"\.$/
+    );
+  });
+});
+
+describe('getResourceApplicationPermissions', () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    global.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('requests the resource by appId, selecting displayName/appRoles/oauth2PermissionScopes', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ value: [] }));
+
+    await getResourceApplicationPermissions('a-token', 'public', 'resource-app-1');
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://graph.microsoft.com/v1.0/servicePrincipals?$filter=appId%20eq%20'resource-app-1'&$select=displayName,appRoles,oauth2PermissionScopes",
+      { headers: { Authorization: 'Bearer a-token' } }
+    );
+  });
+
+  it('builds a permissions map from appRoles (Role) and oauth2PermissionScopes (Scope)', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({
+        value: [
+          {
+            displayName: 'Some Other API',
+            appRoles: [{ id: 'role-1', value: 'Data.ReadWrite.All' }],
+            oauth2PermissionScopes: [{ id: 'scope-1', value: 'Data.Read' }],
+          },
+        ],
+      })
+    );
+
+    const result = await getResourceApplicationPermissions('a-token', 'public', 'resource-app-1');
+
+    expect(result).toEqual({
+      displayName: 'Some Other API',
+      permissions: {
+        'role-1': { name: 'Data.ReadWrite.All', type: 'Role' },
+        'scope-1': { name: 'Data.Read', type: 'Scope' },
+      },
+    });
+  });
+
+  it('returns undefined when no service principal exists for the appId', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ value: [] }));
+
+    const result = await getResourceApplicationPermissions('a-token', 'public', 'resource-app-1');
+
+    expect(result).toBeUndefined();
+  });
+
+  it('tolerates missing appRoles/oauth2PermissionScopes arrays, returning an empty permissions map', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ value: [{ displayName: 'Some Other API' }] }));
+
+    const result = await getResourceApplicationPermissions('a-token', 'public', 'resource-app-1');
+
+    expect(result).toEqual({ displayName: 'Some Other API', permissions: {} });
+  });
+
+  it('falls back to the resourceAppId as displayName when the field is blank', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ value: [{}] }));
+
+    const result = await getResourceApplicationPermissions('a-token', 'public', 'resource-app-1');
+
+    expect(result?.displayName).toBe('resource-app-1');
+  });
+
+  it('throws with the status and body when Graph returns a non-OK response', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ error: { message: 'boom' } }, false, 403, 'Forbidden'));
+
+    await expect(getResourceApplicationPermissions('a-token', 'public', 'resource-app-1')).rejects.toThrow(
+      /Microsoft Graph returned 403 Forbidden looking up resource application "resource-app-1"/
+    );
+  });
+
+  it('still throws a useful error when the error response body cannot be read', async () => {
+    const response = {
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      text: async () => {
+        throw new Error('stream already consumed');
+      },
+    } as unknown as Response;
+    vi.mocked(global.fetch).mockResolvedValueOnce(response);
+
+    await expect(getResourceApplicationPermissions('a-token', 'public', 'resource-app-1')).rejects.toThrow(
+      /Microsoft Graph returned 500 Internal Server Error looking up resource application "resource-app-1"\.$/
     );
   });
 });

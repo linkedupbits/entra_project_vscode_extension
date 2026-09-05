@@ -1,13 +1,21 @@
 import { describe, it, expect, vi } from 'vitest';
 import { AuthService } from '../auth/authService';
 import { Connection } from './types';
-import { GraphApplication, getApplication, listFederatedIdentityCredentials, getServicePrincipalByAppId } from '../graph/graphClient';
+import {
+  GraphApplication,
+  getApplication,
+  listFederatedIdentityCredentials,
+  getServicePrincipalByAppId,
+  getResourceApplicationPermissions,
+} from '../graph/graphClient';
+import { MICROSOFT_GRAPH_APP_ID } from '../graph/wellKnownPermissions';
 import { loadApplicationPreview } from './tenantApplicationPreview';
 
 vi.mock('../graph/graphClient', () => ({
   getApplication: vi.fn(),
   listFederatedIdentityCredentials: vi.fn(),
   getServicePrincipalByAppId: vi.fn(),
+  getResourceApplicationPermissions: vi.fn(),
 }));
 
 const connection: Connection = { name: 'Contoso', tenantId: 't-1', cloud: 'public' };
@@ -142,5 +150,117 @@ describe('loadApplicationPreview', () => {
     expect(getApplication).toHaveBeenCalledWith('a-token', 'public', 'obj-1');
     expect(listFederatedIdentityCredentials).toHaveBeenCalledWith('a-token', 'public', 'obj-1');
     expect(getServicePrincipalByAppId).toHaveBeenCalledWith('a-token', 'public', 'app-1');
+  });
+
+  describe('resourceApplications', () => {
+    it('resolves Microsoft Graph from the checked-in catalogue, without a live lookup', async () => {
+      vi.mocked(getApplication).mockResolvedValueOnce({
+        requiredResourceAccess: [
+          { resourceAppId: MICROSOFT_GRAPH_APP_ID, resourceAccess: [{ id: '7ab1d382-f21e-4acd-a863-ba3e13f7da61', type: 'Role' }] },
+        ],
+      });
+      vi.mocked(listFederatedIdentityCredentials).mockResolvedValueOnce([]);
+      vi.mocked(getServicePrincipalByAppId).mockResolvedValueOnce(undefined);
+
+      const result = await loadApplicationPreview(fakeAuth(), connection, application);
+
+      expect(result.resourceApplications[MICROSOFT_GRAPH_APP_ID]).toEqual({
+        displayName: 'Microsoft Graph',
+        permissions: expect.objectContaining({
+          '7ab1d382-f21e-4acd-a863-ba3e13f7da61': { name: 'Directory.Read.All', type: 'Role' },
+        }),
+      });
+      expect(getResourceApplicationPermissions).not.toHaveBeenCalled();
+    });
+
+    it('resolves an unrecognised resourceAppId via a live lookup', async () => {
+      vi.mocked(getApplication).mockResolvedValueOnce({
+        requiredResourceAccess: [{ resourceAppId: 'other-api', resourceAccess: [{ id: 'perm-1', type: 'Scope' }] }],
+      });
+      vi.mocked(listFederatedIdentityCredentials).mockResolvedValueOnce([]);
+      vi.mocked(getServicePrincipalByAppId).mockResolvedValueOnce(undefined);
+      vi.mocked(getResourceApplicationPermissions).mockResolvedValueOnce({
+        displayName: 'Other API',
+        permissions: { 'perm-1': { name: 'Data.Read', type: 'Scope' } },
+      });
+
+      const result = await loadApplicationPreview(fakeAuth(), connection, application);
+
+      expect(getResourceApplicationPermissions).toHaveBeenCalledWith('a-token', 'public', 'other-api');
+      expect(result.resourceApplications['other-api']).toEqual({
+        displayName: 'Other API',
+        permissions: { 'perm-1': { name: 'Data.Read', type: 'Scope' } },
+      });
+    });
+
+    it('looks up each distinct resourceAppId only once, even if referenced by multiple permission rows', async () => {
+      vi.mocked(getApplication).mockResolvedValueOnce({
+        requiredResourceAccess: [
+          {
+            resourceAppId: 'other-api',
+            resourceAccess: [
+              { id: 'perm-1', type: 'Scope' },
+              { id: 'perm-2', type: 'Scope' },
+            ],
+          },
+        ],
+      });
+      vi.mocked(listFederatedIdentityCredentials).mockResolvedValueOnce([]);
+      vi.mocked(getServicePrincipalByAppId).mockResolvedValueOnce(undefined);
+      vi.mocked(getResourceApplicationPermissions).mockResolvedValueOnce({ displayName: 'Other API', permissions: {} });
+
+      await loadApplicationPreview(fakeAuth(), connection, application);
+
+      expect(getResourceApplicationPermissions).toHaveBeenCalledTimes(1);
+    });
+
+    it('omits a resource from the result when its live lookup fails, without failing the whole preview', async () => {
+      vi.mocked(getApplication).mockResolvedValueOnce({
+        requiredResourceAccess: [{ resourceAppId: 'other-api', resourceAccess: [{ id: 'perm-1', type: 'Scope' }] }],
+      });
+      vi.mocked(listFederatedIdentityCredentials).mockResolvedValueOnce([]);
+      vi.mocked(getServicePrincipalByAppId).mockResolvedValueOnce(undefined);
+      vi.mocked(getResourceApplicationPermissions).mockRejectedValueOnce(new Error('403 Forbidden'));
+
+      const result = await loadApplicationPreview(fakeAuth(), connection, application);
+
+      expect(result.resourceApplications).toEqual({});
+      expect(result.application.kind).toBe('ok');
+    });
+
+    it('omits a resource from the result when its live lookup resolves to undefined (no Service Principal)', async () => {
+      vi.mocked(getApplication).mockResolvedValueOnce({
+        requiredResourceAccess: [{ resourceAppId: 'other-api', resourceAccess: [{ id: 'perm-1', type: 'Scope' }] }],
+      });
+      vi.mocked(listFederatedIdentityCredentials).mockResolvedValueOnce([]);
+      vi.mocked(getServicePrincipalByAppId).mockResolvedValueOnce(undefined);
+      vi.mocked(getResourceApplicationPermissions).mockResolvedValueOnce(undefined);
+
+      const result = await loadApplicationPreview(fakeAuth(), connection, application);
+
+      expect(result.resourceApplications).toEqual({});
+    });
+
+    it('is empty, with no lookups attempted, when the application section itself failed to load', async () => {
+      vi.mocked(getApplication).mockRejectedValueOnce(new Error('boom'));
+      vi.mocked(listFederatedIdentityCredentials).mockResolvedValueOnce([]);
+      vi.mocked(getServicePrincipalByAppId).mockResolvedValueOnce(undefined);
+
+      const result = await loadApplicationPreview(fakeAuth(), connection, application);
+
+      expect(result.resourceApplications).toEqual({});
+      expect(getResourceApplicationPermissions).not.toHaveBeenCalled();
+    });
+
+    it('is empty, with no lookups attempted, when there are no required permissions at all', async () => {
+      vi.mocked(getApplication).mockResolvedValueOnce({});
+      vi.mocked(listFederatedIdentityCredentials).mockResolvedValueOnce([]);
+      vi.mocked(getServicePrincipalByAppId).mockResolvedValueOnce(undefined);
+
+      const result = await loadApplicationPreview(fakeAuth(), connection, application);
+
+      expect(result.resourceApplications).toEqual({});
+      expect(getResourceApplicationPermissions).not.toHaveBeenCalled();
+    });
   });
 });

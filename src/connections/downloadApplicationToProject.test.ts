@@ -25,6 +25,7 @@ function okData(overrides: Partial<ApplicationPreviewData> = {}): ApplicationPre
       value: { displayName: 'My App', signInAudience: 'AzureADMyOrg', redirectUris: [], requiredPermissions: [] },
     },
     applicationPublisherDomain: '',
+    resourceApplications: {},
     federatedCredentials: { kind: 'ok', value: [] },
     servicePrincipal: {
       kind: 'ok',

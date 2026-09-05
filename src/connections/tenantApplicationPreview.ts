@@ -1,9 +1,18 @@
 import { Connection } from './types';
 import { AuthService } from '../auth/authService';
-import { GraphApplication, getApplication, listFederatedIdentityCredentials, getServicePrincipalByAppId } from '../graph/graphClient';
+import {
+  GraphApplication,
+  GraphResourceApplication,
+  getApplication,
+  listFederatedIdentityCredentials,
+  getServicePrincipalByAppId,
+  getResourceApplicationPermissions,
+} from '../graph/graphClient';
+import { getWellKnownResourceApplication } from '../graph/wellKnownPermissions';
 import {
   ApplicationFields,
   FederatedCredentialEntry,
+  RequiredPermission,
   ServicePrincipalFields,
   normalizeApplicationFields,
   normalizeFederatedCredentials,
@@ -22,6 +31,15 @@ export interface ApplicationPreviewData {
    * or the field was absent.
    */
   applicationPublisherDomain: string;
+  /**
+   * Every distinct `resourceAppId` referenced by `application.value.requiredPermissions`,
+   * resolved to that resource's display name and permission catalogue — Microsoft Graph from the
+   * checked-in `wellKnownPermissions.ts` data, any other resource via a live Graph lookup (see
+   * `getResourceApplicationPermissions()`). A resourceAppId absent from this map means it
+   * couldn't be resolved (lookup failed, or no Service Principal exists for it in this tenant);
+   * `applicationPreviewHtml.ts` falls back to showing raw IDs for that resource's rows.
+   */
+  resourceApplications: Record<string, GraphResourceApplication>;
   federatedCredentials: SectionResult<FederatedCredentialEntry[]>;
   servicePrincipal: SectionResult<ServicePrincipalFields>;
 }
@@ -32,6 +50,44 @@ function errorMessage(err: unknown): string {
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+/**
+ * Resolves every distinct resourceAppId in `requiredPermissions` to its display name + permission
+ * catalogue — Microsoft Graph from the static, checked-in data (no network call), everything else
+ * via one live Graph lookup per distinct resource (not per permission row, and not per duplicate
+ * reference across rows). A resource that fails to resolve (lookup error, or no Service Principal
+ * for it in this tenant) is simply absent from the result — not a whole-preview failure, matching
+ * the per-section failure isolation `loadApplicationPreview()` already uses elsewhere.
+ */
+async function resolveResourceApplications(
+  accessToken: string,
+  cloud: Connection['cloud'],
+  requiredPermissions: readonly RequiredPermission[]
+): Promise<Record<string, GraphResourceApplication>> {
+  const resourceAppIds = [...new Set(requiredPermissions.map((p) => p.resourceAppId).filter((id) => id.length > 0))];
+
+  const resolved: Record<string, GraphResourceApplication> = {};
+  const toFetch: string[] = [];
+  for (const resourceAppId of resourceAppIds) {
+    const wellKnown = getWellKnownResourceApplication(resourceAppId);
+    if (wellKnown) {
+      resolved[resourceAppId] = wellKnown;
+    } else {
+      toFetch.push(resourceAppId);
+    }
+  }
+
+  const fetched = await Promise.allSettled(
+    toFetch.map((resourceAppId) => getResourceApplicationPermissions(accessToken, cloud, resourceAppId))
+  );
+  fetched.forEach((result, index) => {
+    if (result.status === 'fulfilled' && result.value) {
+      resolved[toFetch[index]] = result.value;
+    }
+  });
+
+  return resolved;
 }
 
 /**
@@ -60,13 +116,20 @@ export async function loadApplicationPreview(
     getServicePrincipalByAppId(accessToken, connection.cloud, application.appId),
   ]);
 
+  const applicationSection: SectionResult<ApplicationFields> =
+    applicationResult.status === 'fulfilled'
+      ? { kind: 'ok', value: normalizeApplicationFields(applicationResult.value) }
+      : { kind: 'error', message: errorMessage(applicationResult.reason) };
+  const resourceApplications =
+    applicationSection.kind === 'ok'
+      ? await resolveResourceApplications(accessToken, connection.cloud, applicationSection.value.requiredPermissions)
+      : {};
+
   return {
-    application:
-      applicationResult.status === 'fulfilled'
-        ? { kind: 'ok', value: normalizeApplicationFields(applicationResult.value) }
-        : { kind: 'error', message: errorMessage(applicationResult.reason) },
+    application: applicationSection,
     applicationPublisherDomain:
       applicationResult.status === 'fulfilled' ? asString(applicationResult.value.publisherDomain) : '',
+    resourceApplications,
     federatedCredentials:
       federatedCredentialsResult.status === 'fulfilled'
         ? { kind: 'ok', value: normalizeFederatedCredentials(federatedCredentialsResult.value) }

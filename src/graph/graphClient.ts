@@ -124,3 +124,60 @@ export async function getServicePrincipalByAppId(
   const page = (await response.json()) as GraphListResponse<Record<string, unknown>>;
   return page.value[0];
 }
+
+/** One entry in a resource application's exposed permission catalogue — see `getResourceApplicationPermissions`. */
+export interface GraphResourcePermission {
+  name: string;
+  type: 'Role' | 'Scope';
+}
+
+/** A resource application's display name plus its exposed permissions, keyed by permission ID. */
+export interface GraphResourceApplication {
+  displayName: string;
+  permissions: Record<string, GraphResourcePermission>;
+}
+
+/**
+ * UC034 — resolves a `RequiredPermission.resourceAppId` other than Microsoft Graph's well-known ID
+ * (see `graph/wellKnownPermissions.ts`, which covers Graph itself from a checked-in catalogue) by
+ * looking up that resource application's own Service Principal at runtime: its `displayName`, and
+ * its `appRoles` (`type: 'Role'`) / `oauth2PermissionScopes` (`type: 'Scope'`) — the same shape
+ * `scripts/downloadGraphPermissions.js`'s `--from-tenant` mode parses for Microsoft Graph itself,
+ * applied here to an arbitrary resource. Returns undefined if no Service Principal exists for that
+ * appId in this tenant (e.g. the resource has never been consented to here).
+ */
+export async function getResourceApplicationPermissions(
+  accessToken: string,
+  cloud: Cloud,
+  resourceAppId: string
+): Promise<GraphResourceApplication | undefined> {
+  const filter = encodeURIComponent(`appId eq '${resourceAppId}'`);
+  const url = `https://${GRAPH_HOST[cloud]}/v1.0/servicePrincipals?$filter=${filter}&$select=displayName,appRoles,oauth2PermissionScopes`;
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(
+      `Microsoft Graph returned ${response.status} ${response.statusText} looking up resource application "${resourceAppId}"` +
+        (body ? `: ${body}` : '.')
+    );
+  }
+  const page = (await response.json()) as GraphListResponse<Record<string, unknown>>;
+  const servicePrincipal = page.value[0];
+  if (!servicePrincipal) {
+    return undefined;
+  }
+
+  const permissions: Record<string, GraphResourcePermission> = {};
+  const appRoles = Array.isArray(servicePrincipal.appRoles) ? servicePrincipal.appRoles : [];
+  for (const role of appRoles as Array<Record<string, unknown>>) {
+    permissions[asString(role.id)] = { name: asString(role.value), type: 'Role' };
+  }
+  const oauth2PermissionScopes = Array.isArray(servicePrincipal.oauth2PermissionScopes)
+    ? servicePrincipal.oauth2PermissionScopes
+    : [];
+  for (const scope of oauth2PermissionScopes as Array<Record<string, unknown>>) {
+    permissions[asString(scope.id)] = { name: asString(scope.value), type: 'Scope' };
+  }
+
+  return { displayName: asString(servicePrincipal.displayName) || resourceAppId, permissions };
+}

@@ -44,7 +44,12 @@ environments, or dependencies to show).
      typical application has very few).
    * `GET /v1.0/servicePrincipals?$filter=appId eq '{appId}'` — the Enterprise Application
      (Service Principal) for this application's `appId`, if one exists.
-3. Each of the three responses is normalized through the same functions
+   * Once the application's `requiredResourceAccess` is known, one further
+     `GET /v1.0/servicePrincipals?$filter=appId eq '{resourceAppId}'&$select=displayName,appRoles,oauth2PermissionScopes`
+     call per *distinct* resource application it references (not per permission row, and not for
+     Microsoft Graph — see step 4's Required Permissions bullet below) — resolving each referenced
+     resource's display name and its own permission catalogue.
+3. Each of the three application/credentials/service-principal responses is normalized through the same functions
    [UC042](../UC400_ApplicationManagement/UC042_ViewApplicationDetails.md)'s structured editor
    uses to read `Application.yaml.j2`, `FederatedCredentials.yaml.j2`, and
    `ServicePrincipal.yaml.j2` from disk — so identical field mapping (and the same unmodelled-field
@@ -62,18 +67,28 @@ environments, or dependencies to show).
      `displayName`, which Graph itself doesn't enforce as unique. Shown as an explicit "No unique
      name tag found" state, not omitted, when the Service Principal has no such tag or its section
      failed to load (see `tenantApplicationIdentity.ts`'s `parseTenantApplicationIdentity()`).
-   * Each required-permission row in the Application section shows the raw `resourceAppId`/`id`
-     pair *and*, when recognised, a resolved human-readable name (e.g. Microsoft Graph's
-     `7ab1d382-f21e-4acd-a863-ba3e13f7da61` shown alongside "Directory.Read.All") — see
-     `graph/wellKnownPermissions.ts`'s `describeRequiredPermission()`. The raw IDs are always shown
-     too, never replaced by the resolved name, so the underlying value stays visible/verifiable.
-     Only Microsoft Graph is covered, via a checked-in, regeneratable lookup table holding its
-     complete permission catalogue (see `scripts/downloadGraphPermissions.js`, which by default
-     fetches this from Microsoft's own public, unauthenticated permissions reference data — no
-     credentials needed, with a `--from-tenant` fallback that queries a live tenant instead) — an
-     unrecognised resourceAppId (any resource other than Microsoft Graph) falls back to showing
-     just the raw IDs, the previous behavior. This resolution is preview-only; UC042's local,
-     editable Required Permissions list does not (yet) do the same.
+   * Each required-permission row shows `<Application name> : <Scope name> (<Application ID> : <Scope ID>)`
+     — e.g. `Microsoft Graph : Directory.Read.All (00000003-0000-0000-c000-000000000000 :
+     7ab1d382-f21e-4acd-a863-ba3e13f7da61)`. The two IDs are always shown, never replaced by the
+     resolved names, so the underlying value stays visible/verifiable; whichever name (or both)
+     couldn't be resolved falls back to showing that half's raw ID in its place instead of blocking
+     the row. Names are resolved two ways:
+     * `resourceAppId` equal to Microsoft Graph's well-known ID
+       (`00000003-0000-0000-c000-000000000000`) resolves from a checked-in, regeneratable lookup
+       table holding Microsoft Graph's complete permission catalogue (see
+       `scripts/downloadGraphPermissions.js`, which by default fetches this from Microsoft's own
+       public, unauthenticated permissions reference data — no credentials needed, with a
+       `--from-tenant` fallback that queries a live tenant instead) — no network call at preview
+       time.
+     * Any other `resourceAppId` resolves from the live lookup step 2 makes for it — the
+       resource's own display name, and its own `id`→name mapping from its `appRoles`/
+       `oauth2PermissionScopes` — obtained at runtime, not from any checked-in data, since this
+       extension has no static catalogue for resources other than Microsoft Graph. A resource
+       whose lookup failed, found no Service Principal, or doesn't expose the referenced
+       permission ID simply falls back to raw IDs for the affected half(s) of that row.
+
+     This resolution is preview-only; UC042's local, editable Required Permissions list does not
+     (yet) do the same.
    * The panel always shows a **Download to project** button — see
      [UC035 — Download an Application Artifact to the Project](UC035_DownloadApplicationArtifact.md).
      When no unique name was found, selecting it prompts for an application name instead of
@@ -108,6 +123,16 @@ environments, or dependencies to show).
    preview panel is opened (or, if one was already open for a different application, it is left
    untouched). Unlike A1, this is "nothing to show at all" rather than a partial failure, since no
    call was even attempted.
+
+### A3 — A resource application's permission lookup fails or finds nothing
+
+1. One of step 2's per-resource lookups fails (e.g. no permission to read that resource's Service
+   Principal), or succeeds but finds no Service Principal for that `resourceAppId` in this tenant.
+2. Unlike A1, this doesn't produce a section-level error: the Required Permissions list still
+   renders normally, with that resource's rows falling back to raw IDs in place of the names that
+   lookup would have provided (see step 4's Required Permissions bullet). A failure resolving one
+   resource has no effect on any other resource's rows, including Microsoft Graph's (never looked
+   up live at all — see step 4).
 
 ## Postconditions
 
