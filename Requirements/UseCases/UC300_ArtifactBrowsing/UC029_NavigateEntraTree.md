@@ -25,7 +25,7 @@ This use case details the shape of the single tree control the extension present
 6. Expanding **Applications** lists each application definition — one child node per subfolder of `<artifactsRoot>/applications/` (see [UC040](../UC400_ApplicationManagement/UC040_DefineApplication.md)/[UC041](../UC400_ApplicationManagement/UC041_BrowseApplicationDefinitions.md)).
 7. Clicking an application node itself (as opposed to expanding it) opens a structured, editable webview of all four of its files — see [UC042 — View Application Details](../UC400_ApplicationManagement/UC042_ViewApplicationDetails.md). Expanding it instead (or as well) lists the individual files found in it (`AppConfig.yaml` and whichever of the three `.yaml.j2` templates exist); selecting one of those opens it as a normal, directly-editable document — not UC042's structured view, and not the shared artifact-viewer webview from step 9 below, since these are hand-authored source files, not a Graph snapshot.
 8. Expanding a downloaded-artifact category folder under **Project** (once implemented) shows one artifact-detail item per matching local file (see [UC033](UC033_ViewLocalProjectArtifacts.md)).
-9. Selecting an artifact-detail item — under a connection (Connections side), or a downloaded artifact under **Project** — opens it in the shared artifact-viewer webview (see [UC032 — Preview Artifact Before Download](UC032_PreviewArtifactBeforeDownload.md) for the Connections side, [UC033](UC033_ViewLocalProjectArtifacts.md) for the Project side). This does not apply to application-definition files (step 7). **Not implemented for the Connections side yet**: selecting an application item under a connection's Applications folder currently does nothing, since UC032 itself isn't implemented.
+9. Selecting an artifact-detail item — under a connection (Connections side), or a downloaded artifact under **Project** — opens it in the shared artifact-viewer webview (see [UC032 — Preview Artifact Before Download](UC032_PreviewArtifactBeforeDownload.md) for the Connections side, [UC033](UC033_ViewLocalProjectArtifacts.md) for the Project side). This does not apply to application-definition files (step 7). **Implemented for the Connections side, scoped to Applications**: selecting an application item under a connection's Applications folder previews it — see [UC034](UC034_PreviewApplicationArtifact.md). The Project side (UC033) remains unimplemented.
 
 ## Alternate Flows
 
@@ -68,5 +68,6 @@ This use case details the shape of the single tree control the extension present
 * [UC030 — Browse Tenant Artifacts](UC030_BrowseTenantArtifacts.md)
 * [UC032 — Preview Artifact Before Download](UC032_PreviewArtifactBeforeDownload.md)
 * [UC033 — View Local Project Artifacts](UC033_ViewLocalProjectArtifacts.md)
+* [UC034 — Preview an Application Artifact](UC034_PreviewApplicationArtifact.md)
 * [UC041 — Browse Application Definitions](../UC400_ApplicationManagement/UC041_BrowseApplicationDefinitions.md)
 * [UC042 — View Application Details](../UC400_ApplicationManagement/UC042_ViewApplicationDetails.md)

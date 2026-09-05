@@ -27,6 +27,7 @@ export default defineConfig({
         'src/extension.ts',
         'src/connections/connectionFormPanel.ts',
         'src/applications/applicationFormPanel.ts',
+        'src/webview/artifactViewerPanel.ts',
       ],
       thresholds: {
         statements: 95,

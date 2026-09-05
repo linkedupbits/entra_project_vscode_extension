@@ -33,10 +33,12 @@ Not all of the above is implemented yet — check before relying on this summary
 - **Implemented**: adding/editing connections and authenticating (delegated and app-only); the
   full application-definition workflow — browsing, and the structured editor for an existing
   application's four files; and, for a connected connection, an **Applications** folder listing
-  its live App Registrations via Graph.
+  its live App Registrations via Graph, each selectable for a read-only preview of its full Graph
+  representation.
 - **Not yet implemented**: the other tenant artifact categories (Service Principals, Groups,
-  Directory Roles, External ID user flows/custom auth extensions), previewing/downloading a tenant
-  artifact, and actually rendering/deploying an application definition to a tenant.
+  Directory Roles, External ID user flows/custom auth extensions), downloading a tenant artifact
+  or comparing it with a local file, and actually rendering/deploying an application definition to
+  a tenant.
 
 [CLAUDE.md](CLAUDE.md) has the full list of architecture decisions and their rationale; the
 [Requirements/](Requirements/) folder is the authoritative source of truth for scope and behavior

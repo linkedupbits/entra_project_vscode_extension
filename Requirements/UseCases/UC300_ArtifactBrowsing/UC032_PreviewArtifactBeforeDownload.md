@@ -4,6 +4,13 @@
 
 This use case details how a user views the full contents of a remote Entra artifact, in the same YAML representation it would be downloaded as, without writing anything to the local project structure. It uses the same shared artifact-viewer webview as [UC033 — View Local Project Artifacts](UC033_ViewLocalProjectArtifacts.md), so a remote (pre-download) artifact and a local (already-downloaded) one look and behave identically when viewed — the only difference is a small source badge indicating where the content came from.
 
+**Implementation status:** this is the generic specification, covering every artifact category and
+the eventual `_meta` block/download/compare-with-local behavior below. What's actually built today
+is scoped to one artifact category (Applications) and is documented separately as
+[UC034 — Preview an Application Artifact](UC034_PreviewApplicationArtifact.md), so this document
+doesn't need rewriting each time another category gains preview support — see UC034 for exactly
+what differs from the flow below.
+
 ## Actors
 
 * **User**
@@ -43,3 +50,4 @@ This use case details how a user views the full contents of a remote Entra artif
 
 * [UC030 — Browse Tenant Artifacts](UC030_BrowseTenantArtifacts.md) — precondition.
 * [UC031 — Download Artifact](UC031_DownloadArtifact.md) — the natural next step.
+* [UC034 — Preview an Application Artifact](UC034_PreviewApplicationArtifact.md) — the currently-implemented instance of this use case, scoped to Applications.

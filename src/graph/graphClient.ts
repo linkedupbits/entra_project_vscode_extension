@@ -48,3 +48,24 @@ export async function listApplications(accessToken: string, cloud: Cloud): Promi
 
   return applications;
 }
+
+/**
+ * UC034 — fetches one application's full Graph representation (every field, not just the
+ * id/appId/displayName subset listApplications() selects), for previewing before download.
+ * `@odata.context` — Graph's own response-shape metadata, not part of the object itself — is
+ * stripped, since it's noise in a preview and isn't part of what UC020 would eventually persist.
+ */
+export async function getApplication(accessToken: string, cloud: Cloud, id: string): Promise<Record<string, unknown>> {
+  const url = `https://${GRAPH_HOST[cloud]}/v1.0/applications/${encodeURIComponent(id)}`;
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(
+      `Microsoft Graph returned ${response.status} ${response.statusText} fetching application "${id}"` +
+        (body ? `: ${body}` : '.')
+    );
+  }
+  const application = (await response.json()) as Record<string, unknown>;
+  delete application['@odata.context'];
+  return application;
+}

@@ -68,11 +68,13 @@ code as it's built:
 - `UseCases/UC200_ArtifactSerialisation/` — how a Graph object becomes a local file (UC020).
 - `UseCases/UC300_ArtifactBrowsing/` — the tree control itself (UC029), and
   browsing/downloading/previewing tenant artifacts and viewing the local project structure
-  (UC030–UC033). UC030 is **partially implemented**: a connected connection shows a single
+  (UC030–UC034). UC030 is **partially implemented**: a connected connection shows a single
   Applications (App Registrations) folder listing live Graph data; the other five artifact
   categories, auto-authenticating on expand, manual paging, throttling retry, and per-category
   permission errors are not — see UC030's own "Implementation status" note before assuming any of
-  its main-flow steps beyond that one category are built.
+  its main-flow steps beyond that one category are built. UC032 (Preview Artifact Before Download)
+  is a generic spec with no code of its own; UC034 is the concrete, implemented instance of it
+  scoped to Applications, and is the one to read for actual behavior.
 - `UseCases/UC400_ApplicationManagement/` — the on-disk structure for a locally-authored,
   deployable "application definition" (UC040 — **format only, not implemented**: don't assume any
   code creates a *new* application from scratch, renders its Nunjucks templates, or deploys it just
@@ -245,6 +247,19 @@ These came out of an explicit planning pass with the user and should not be sile
   Roles, External ID User Flows/Custom Authentication Extensions), throttling retry, and
   per-category 403 handling are not implemented — don't assume `ConnectionsBranch` has any of that
   just because Applications works.
+- **Application artifact preview (UC034, the implemented instance of UC032)**: clicking a
+  `TenantApplicationItem` runs `entra.previewArtifact`, which calls `graphClient.ts`'s
+  `getApplication()` (a full `GET /v1.0/applications/{id}`, unlike `listApplications()`'s
+  field-limited list call — `@odata.context` is stripped since it's response-shape metadata, not
+  part of the application) and shows the result as YAML in `webview/artifactViewerPanel.ts`'s
+  `ArtifactViewerPanel`, keyed by `<connection name>::<object id>` so re-selecting the same
+  application reveals/refreshes its existing panel rather than opening a duplicate. This panel is
+  intentionally inert — no scripts, no buttons, no message-passing — since UC032 requires the
+  viewer be read-only "by construction," not merely by omitting an edit affordance in the UI. It
+  does not yet build the `_meta` block UC020/UC032 describe, offer "Compare with local file," or
+  support any artifact category besides Applications — see UC034 for the full list of what's
+  deferred and why. `artifactViewerPanel.ts` is excluded from coverage as thin webview glue, same
+  as `connectionFormPanel.ts`/`applicationFormPanel.ts`.
 - **Extension host**: must run in the Node extension host, not as a web extension — MSAL's loopback
   listener and local filesystem access both require Node APIs.
 - **Shared artifact viewer**: one webview component renders an artifact regardless of whether it

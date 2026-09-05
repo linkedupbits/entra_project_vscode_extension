@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { listApplications } from './graphClient';
+import { listApplications, getApplication } from './graphClient';
 
 function jsonResponse(body: unknown, ok = true, status = 200, statusText = 'OK'): Response {
   return {
@@ -109,6 +109,70 @@ describe('listApplications', () => {
 
     await expect(listApplications('a-token', 'public')).rejects.toThrow(
       /Microsoft Graph returned 500 Internal Server Error listing applications\.$/
+    );
+  });
+});
+
+describe('getApplication', () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    global.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('requests the application by ID, with a bearer token', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ id: 'obj-1', displayName: 'My App' }));
+
+    await getApplication('a-token', 'public', 'obj-1');
+
+    expect(global.fetch).toHaveBeenCalledWith('https://graph.microsoft.com/v1.0/applications/obj-1', {
+      headers: { Authorization: 'Bearer a-token' },
+    });
+  });
+
+  it('URL-encodes the application ID', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ id: 'obj/1' }));
+
+    await getApplication('a-token', 'public', 'obj/1');
+
+    expect(vi.mocked(global.fetch).mock.calls[0][0]).toBe('https://graph.microsoft.com/v1.0/applications/obj%2F1');
+  });
+
+  it('returns the full object, stripping @odata.context', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ '@odata.context': 'https://graph.microsoft.com/v1.0/$metadata#applications/$entity', id: 'obj-1', displayName: 'My App' })
+    );
+
+    const result = await getApplication('a-token', 'public', 'obj-1');
+
+    expect(result).toEqual({ id: 'obj-1', displayName: 'My App' });
+  });
+
+  it('throws with the status and body when Graph returns a non-OK response', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ error: { message: 'Not found' } }, false, 404, 'Not Found'));
+
+    await expect(getApplication('a-token', 'public', 'obj-1')).rejects.toThrow(
+      /Microsoft Graph returned 404 Not Found fetching application "obj-1"/
+    );
+  });
+
+  it('still throws a useful error when the error response body cannot be read', async () => {
+    const response = {
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      text: async () => {
+        throw new Error('stream already consumed');
+      },
+    } as unknown as Response;
+    vi.mocked(global.fetch).mockResolvedValueOnce(response);
+
+    await expect(getApplication('a-token', 'public', 'obj-1')).rejects.toThrow(
+      /Microsoft Graph returned 500 Internal Server Error fetching application "obj-1"\.$/
     );
   });
 });

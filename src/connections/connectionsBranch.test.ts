@@ -78,7 +78,7 @@ describe('TenantApplicationsRootItem', () => {
 
 describe('TenantApplicationItem', () => {
   it('labels by display name, describes by appId, and shows both plus the object ID in its tooltip', () => {
-    const item = new TenantApplicationItem({ id: 'obj-1', appId: 'app-1', displayName: 'My App' });
+    const item = new TenantApplicationItem(connA, { id: 'obj-1', appId: 'app-1', displayName: 'My App' });
     expect(item.label).toBe('My App');
     expect(item.description).toBe('app-1');
     expect((item.tooltip as MarkdownString).value).toContain('My App');
@@ -87,8 +87,18 @@ describe('TenantApplicationItem', () => {
   });
 
   it('falls back to the appId as the label when displayName is blank', () => {
-    const item = new TenantApplicationItem({ id: 'obj-1', appId: 'app-1', displayName: '' });
+    const item = new TenantApplicationItem(connA, { id: 'obj-1', appId: 'app-1', displayName: '' });
     expect(item.label).toBe('app-1');
+  });
+
+  it('runs entra.previewArtifact with its connection and application when clicked', () => {
+    const application = { id: 'obj-1', appId: 'app-1', displayName: 'My App' };
+    const item = new TenantApplicationItem(connA, application);
+    expect(item.command).toEqual({
+      command: 'entra.previewArtifact',
+      title: 'Preview',
+      arguments: [{ connection: connA, application }],
+    });
   });
 });
 
@@ -121,7 +131,7 @@ describe('ConnectionsBranch', () => {
   });
 
   it('returns no children for an element it does not recognize', async () => {
-    const children = await branch([]).getChildren(new TenantApplicationItem({ id: '1', appId: 'a', displayName: 'A' }));
+    const children = await branch([]).getChildren(new TenantApplicationItem(connA, { id: '1', appId: 'a', displayName: 'A' }));
     expect(children).toEqual([]);
   });
 
@@ -130,7 +140,7 @@ describe('ConnectionsBranch', () => {
       const b = branch([]);
       expect(b.owns(new ConnectionTreeItem(connA, true))).toBe(true);
       expect(b.owns(new TenantApplicationsRootItem(connA))).toBe(true);
-      expect(b.owns(new TenantApplicationItem({ id: '1', appId: 'a', displayName: 'A' }))).toBe(false);
+      expect(b.owns(new TenantApplicationItem(connA, { id: '1', appId: 'a', displayName: 'A' }))).toBe(false);
     });
   });
 

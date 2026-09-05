@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
+import * as YAML from 'yaml';
 import { ConnectionStore } from './connections/connectionStore';
 import { ConnectionsBranch, ConnectionTreeItem } from './connections/connectionsBranch';
+import { Connection } from './connections/types';
 import { ProjectBranch } from './project/projectBranch';
 import { ApplicationsBranch } from './applications/applicationsBranch';
 import { ApplicationStore } from './applications/applicationStore';
@@ -10,6 +12,8 @@ import { AuthService } from './auth/authService';
 import { CredentialStore } from './auth/credentialStore';
 import { ConnectionFormPanel } from './connections/connectionFormPanel';
 import { resolveConnectionArg } from './connections/resolveConnectionArg';
+import { GraphApplication, getApplication } from './graph/graphClient';
+import { ArtifactViewerPanel } from './webview/artifactViewerPanel';
 import { registerStatusBar } from './statusBar';
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -87,7 +91,35 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand('entra.viewApplication', (item: { folderUri: vscode.Uri; name: string }) => {
       ApplicationFormPanel.show(applicationStore, applicationsBranch, item.folderUri, item.name);
-    })
+    }),
+
+    // UC034 — the currently implemented instance of UC032's generic artifact preview, scoped to
+    // an Applications-category artifact reached via UC030.
+    vscode.commands.registerCommand(
+      'entra.previewArtifact',
+      async (item: { connection: Connection; application: GraphApplication }) => {
+        const label = item.application.displayName || item.application.appId;
+        try {
+          await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: `Loading "${label}"…` },
+            async () => {
+              const accessToken = await authService.getGraphAccessToken(item.connection);
+              const fullApplication = await getApplication(accessToken, item.connection.cloud, item.application.id);
+              ArtifactViewerPanel.show(
+                `${item.connection.name}::${item.application.id}`,
+                label,
+                `Connection: ${item.connection.name}`,
+                YAML.stringify(fullApplication)
+              );
+            }
+          );
+        } catch (err) {
+          void vscode.window.showErrorMessage(
+            `Could not load "${label}": ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+      }
+    )
   );
 }
 

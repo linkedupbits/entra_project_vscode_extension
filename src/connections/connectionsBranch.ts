@@ -65,9 +65,16 @@ export class TenantApplicationsRootItem extends vscode.TreeItem {
   }
 }
 
-/** One node per Entra application (app registration) returned by Microsoft Graph for a connection's tenant (UC030). */
+/**
+ * One node per Entra application (app registration) returned by Microsoft Graph for a
+ * connection's tenant (UC030). Clicking it runs `entra.previewArtifact` (UC034 — the currently
+ * implemented instance of UC032's generic artifact preview, scoped to this artifact type).
+ */
 export class TenantApplicationItem extends vscode.TreeItem {
-  constructor(application: GraphApplication) {
+  constructor(
+    public readonly connection: Connection,
+    public readonly application: GraphApplication
+  ) {
     super(application.displayName || application.appId, vscode.TreeItemCollapsibleState.None);
     this.description = application.appId;
     this.contextValue = 'tenantApplication';
@@ -76,6 +83,11 @@ export class TenantApplicationItem extends vscode.TreeItem {
       `**${application.displayName || '(no display name)'}**\n\n` +
         `Application (client) ID: ${application.appId}\n\nObject ID: ${application.id}`
     );
+    this.command = {
+      command: 'entra.previewArtifact',
+      title: 'Preview',
+      arguments: [{ connection, application }],
+    };
   }
 }
 
@@ -145,7 +157,7 @@ export class ConnectionsBranch {
       return applications
         .slice()
         .sort((a, b) => (a.displayName || a.appId).localeCompare(b.displayName || b.appId))
-        .map((application) => new TenantApplicationItem(application));
+        .map((application) => new TenantApplicationItem(connection, application));
     } catch (err) {
       return [new TenantApplicationsErrorItem(err instanceof Error ? err.message : String(err))];
     }
