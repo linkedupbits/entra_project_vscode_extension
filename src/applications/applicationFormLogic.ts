@@ -23,8 +23,13 @@ export interface EnvironmentRowInput {
   publisherDomain: string;
   tenancy_type: string;
   environment_code: string;
-  /** Carried through unedited by this row's own UI — see EnvironmentEntry.Variables' doc comment. */
-  variables: Record<string, string>;
+  /**
+   * This environment's *own* Variables rows (its `overridesOnly()` subset — see
+   * EnvironmentEntry.Variables' doc comment), edited as key/value rows in its card the same way the
+   * top-level shared Variables are; `resolveApplicationSubmit` merges the shared defaults back on
+   * top of these to rebuild the full effective set.
+   */
+  variables: VariableRowInput[];
 }
 
 /** `appName` is picked from the project's existing application folders, not free text — see ApplicationEditorProvider. */
@@ -97,6 +102,8 @@ export type ApplicationSubmitResolution =
   | { kind: 'duplicateVariableKey'; key: string }
   | { kind: 'missingEnvironmentName'; index: number }
   | { kind: 'duplicateEnvironmentName'; name: string }
+  | { kind: 'missingEnvironmentVariableKey'; environment: string }
+  | { kind: 'duplicateEnvironmentVariableKey'; environment: string; key: string }
   | { kind: 'missingDependencyKey' }
   | { kind: 'missingDependencyAppName'; key: string }
   | { kind: 'duplicateDependencyKey'; key: string }
@@ -129,6 +136,36 @@ const SIGN_IN_AUDIENCES: readonly SignInAudience[] = [
 
 function coerceSignInAudience(value: string): SignInAudience {
   return (SIGN_IN_AUDIENCES as string[]).includes(value) ? (value as SignInAudience) : 'AzureADMyOrg';
+}
+
+type VariableRowsResult =
+  | { kind: 'ok'; variables: Record<string, string> }
+  | { kind: 'missingKey' }
+  | { kind: 'duplicateKey'; key: string };
+
+/**
+ * Shared by the top-level shared Variables and each environment's own Variables list: a key/value
+ * row entirely blank is an unused spacer and silently dropped; a value with no key, or two rows
+ * with the same key, block the save. The caller turns `missingKey`/`duplicateKey` into whichever
+ * error kind names its own section.
+ */
+function resolveVariableRows(rows: readonly VariableRowInput[]): VariableRowsResult {
+  const variables: Record<string, string> = {};
+  for (const row of rows) {
+    const key = row.key.trim();
+    const value = row.value.trim();
+    if (!key && !value) {
+      continue;
+    }
+    if (!key) {
+      return { kind: 'missingKey' };
+    }
+    if (Object.prototype.hasOwnProperty.call(variables, key)) {
+      return { kind: 'duplicateKey', key };
+    }
+    variables[key] = value;
+  }
+  return { kind: 'ok', variables };
 }
 
 function resolveApplication(input: ApplicationFieldsInput): ApplicationFields {
@@ -224,7 +261,8 @@ function resolveServicePrincipal(input: ServicePrincipalFieldsInput): ServicePri
 /**
  * UC042's validation: required Application Name; Variables keys must be present and unique (a
  * row that's entirely blank — no key, no value — is a spacer the UI lets you add and is silently
- * dropped, not an error); Environment names must be present and unique; Dependency rows must have
+ * dropped, not an error) — for both the top-level shared Variables and each environment's own
+ * Variables list; Environment names must be present and unique; Dependency rows must have
  * both a reference key and a selected application, and reference keys must be unique (same
  * blank-row-as-spacer rule as Variables); a custom Tag must not start with a reserved prefix
  * (`AppName:`, `Environment:`, `BusinessUnit:`) reserved for the Generated tags preview, so a
@@ -240,28 +278,27 @@ export function resolveApplicationSubmit(input: ApplicationFormInput): Applicati
     return { kind: 'missingApplicationName' };
   }
 
-  const variables: Record<string, string> = {};
-  for (const row of input.variables) {
-    const key = row.key.trim();
-    const value = row.value.trim();
-    if (!key && !value) {
-      continue;
-    }
-    if (!key) {
-      return { kind: 'missingVariableKey' };
-    }
-    if (Object.prototype.hasOwnProperty.call(variables, key)) {
-      return { kind: 'duplicateVariableKey', key };
-    }
-    variables[key] = value;
+  const topVariables = resolveVariableRows(input.variables);
+  if (topVariables.kind === 'missingKey') {
+    return { kind: 'missingVariableKey' };
   }
+  if (topVariables.kind === 'duplicateKey') {
+    return { kind: 'duplicateVariableKey', key: topVariables.key };
+  }
+  const variables = topVariables.variables;
 
   const environments: EnvironmentEntry[] = [];
   const seenNames = new Set<string>();
   for (let index = 0; index < input.environments.length; index++) {
     const row = input.environments[index];
     const name = row.name.trim();
-    const isBlankRow = !name && !row.publisherDomain.trim() && !row.tenancy_type.trim() && !row.environment_code.trim();
+    const hasVariableContent = row.variables.some((v) => v.key.trim() !== '' || v.value.trim() !== '');
+    const isBlankRow =
+      !name &&
+      !row.publisherDomain.trim() &&
+      !row.tenancy_type.trim() &&
+      !row.environment_code.trim() &&
+      !hasVariableContent;
     if (isBlankRow) {
       continue;
     }
@@ -272,12 +309,19 @@ export function resolveApplicationSubmit(input: ApplicationFormInput): Applicati
       return { kind: 'duplicateEnvironmentName', name };
     }
     seenNames.add(name.toLowerCase());
+    const envVariables = resolveVariableRows(row.variables);
+    if (envVariables.kind === 'missingKey') {
+      return { kind: 'missingEnvironmentVariableKey', environment: name };
+    }
+    if (envVariables.kind === 'duplicateKey') {
+      return { kind: 'duplicateEnvironmentVariableKey', environment: name, key: envVariables.key };
+    }
     environments.push({
       name,
       publisherDomain: row.publisherDomain.trim(),
       tenancy_type: row.tenancy_type.trim(),
       environment_code: row.environment_code.trim(),
-      Variables: { ...row.variables },
+      Variables: envVariables.variables,
     });
   }
   mergeDefaultVariablesIntoEnvironments(variables, environments);
@@ -332,15 +376,15 @@ export function resolveApplicationSubmit(input: ApplicationFormInput): Applicati
 }
 
 /**
- * `AppConfig.yaml`'s shared, top-level `Variables` are meant to be visible from every environment's
- * own `Variables` map too (see `Example_Project`'s `AppConfig.yaml`, which expresses this with a
- * YAML anchor/merge key — `Variables: &DefaultVariables` / `<<: *DefaultVariables` — a hand-authored
- * convenience this form can't preserve since it re-serializes fresh on every save, per UC042's
- * documented anchor-loss tradeoff). This achieves the same practical effect without the anchor
- * syntax: every default is copied into each environment's own map, with that environment's own
- * entries (including whatever `ensureOauth2ScopeIdVariablesInEnvironments` adds afterward) taking
- * precedence over a default of the same key, mirroring how a YAML merge key's explicit keys win
- * over its merged-in ones.
+ * `AppConfig.yaml`'s shared, top-level `Variables` are visible from every environment's own
+ * `Variables` map too (see `Example_Project`'s `AppConfig.yaml`, which expresses this with a YAML
+ * anchor/merge key — `Variables: &DefaultVariables` / `<<: *DefaultVariables`, reconstructed on
+ * every save by `types.ts`'s `buildAppConfigNode`). This rebuilds the *in-memory* full effective
+ * set that the on-disk merge key represents: every default is copied into each environment's own
+ * map, with that environment's own entries (including whatever
+ * `ensureOauth2ScopeIdVariablesInEnvironments` adds afterward) taking precedence over a default of
+ * the same key, mirroring how a YAML merge key's explicit keys win over its merged-in ones.
+ * `buildAppConfigNode` then subtracts the defaults back out (`overridesOnly`) when it writes.
  */
 function mergeDefaultVariablesIntoEnvironments(
   defaults: Record<string, string>,

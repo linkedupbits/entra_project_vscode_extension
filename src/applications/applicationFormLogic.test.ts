@@ -7,7 +7,7 @@ function env(overrides: Partial<ApplicationFormInput['environments'][number]> = 
     publisherDomain: 'contoso-dev.onmicrosoft.com',
     tenancy_type: 'ciam',
     environment_code: 'dev',
-    variables: {},
+    variables: [],
     ...overrides,
   };
 }
@@ -133,13 +133,68 @@ describe('resolveApplicationSubmit', () => {
     it('drops a fully-blank row silently', () => {
       const result = resolveApplicationSubmit(
         formInput({
-          environments: [{ name: '', publisherDomain: '', tenancy_type: '', environment_code: '', variables: {} }],
+          environments: [{ name: '', publisherDomain: '', tenancy_type: '', environment_code: '', variables: [] }],
         })
       );
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
         expect(result.files.appConfig.Environments).toEqual([]);
       }
+    });
+
+    it('does not drop a row that is blank apart from a variable the user typed', () => {
+      const result = resolveApplicationSubmit(
+        formInput({
+          environments: [
+            { name: '', publisherDomain: '', tenancy_type: '', environment_code: '', variables: [{ key: 'k', value: 'v' }] },
+          ],
+        })
+      );
+      expect(result).toEqual({ kind: 'missingEnvironmentName', index: 0 });
+    });
+
+    it('drops a blank spacer variable row inside an environment, keeps the real ones', () => {
+      const result = resolveApplicationSubmit(
+        formInput({
+          environments: [
+            env({
+              name: 'Dev',
+              variables: [
+                { key: '  ', value: '  ' },
+                { key: '  Region  ', value: '  westus  ' },
+              ],
+            }),
+          ],
+        })
+      );
+      expect(result.kind).toBe('ok');
+      if (result.kind === 'ok') {
+        expect(result.files.appConfig.Environments[0].Variables).toEqual({ Region: 'westus' });
+      }
+    });
+
+    it('reports missingEnvironmentVariableKey (with the environment name) for a keyless value', () => {
+      const result = resolveApplicationSubmit(
+        formInput({ environments: [env({ name: 'Dev', variables: [{ key: '', value: 'orphan' }] })] })
+      );
+      expect(result).toEqual({ kind: 'missingEnvironmentVariableKey', environment: 'Dev' });
+    });
+
+    it('reports duplicateEnvironmentVariableKey (with the environment name and key)', () => {
+      const result = resolveApplicationSubmit(
+        formInput({
+          environments: [
+            env({
+              name: 'Dev',
+              variables: [
+                { key: 'Region', value: 'westus' },
+                { key: 'Region', value: 'eastus' },
+              ],
+            }),
+          ],
+        })
+      );
+      expect(result).toEqual({ kind: 'duplicateEnvironmentVariableKey', environment: 'Dev', key: 'Region' });
     });
 
     it('reports missingEnvironmentName with the row index when other fields are filled in', () => {
@@ -503,7 +558,7 @@ describe('resolveApplicationSubmit', () => {
     it('does not overwrite an environment that already has a value for the ID variable name', () => {
       const result = resolveApplicationSubmit(
         formInput({
-          environments: [env({ name: 'Dev', variables: { MyNewPermissionVariableName: 'existing-value' } })],
+          environments: [env({ name: 'Dev', variables: [{ key: 'MyNewPermissionVariableName', value: 'existing-value' }] })],
           application: {
             displayName: '',
             signInAudience: 'AzureADMyOrg',
@@ -545,7 +600,7 @@ describe('resolveApplicationSubmit', () => {
         formInput({
           variables: [{ key: 'owner_email', value: 'team@example.com' }],
           environments: [
-            { name: 'Dev', publisherDomain: '', tenancy_type: 'ciam', environment_code: 'dev', variables: {} },
+            { name: 'Dev', publisherDomain: '', tenancy_type: 'ciam', environment_code: 'dev', variables: [] },
           ],
         })
       );
@@ -565,7 +620,7 @@ describe('resolveApplicationSubmit', () => {
               publisherDomain: '',
               tenancy_type: 'ciam',
               environment_code: 'dev',
-              variables: { owner_email: 'dev-team@example.com' },
+              variables: [{ key: 'owner_email', value: 'dev-team@example.com' }],
             },
           ],
         })

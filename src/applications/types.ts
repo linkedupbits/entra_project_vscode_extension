@@ -16,9 +16,13 @@ export interface EnvironmentEntry {
    * where UC042's editor parks an `Exposed API scopes` row's generated `id`, referenced from
    * `Application.yaml.j2` as `{{ environment.Variables.<key> }}` (see `oauth2ScopeIdReference.ts`),
    * so the same logical scope's id can be a fixed real GUID per deployment target without hardcoding
-   * one directly into the template. Not surfaced as its own editable UI (yet) — see
-   * `resolveApplicationSubmit`'s `ensureOauth2ScopeIdVariablesInEnvironments` for how a referenced
-   * key is guaranteed to exist here, generating a GUID for it if missing, on every save.
+   * one directly into the template. In memory this always holds the environment's *full effective*
+   * set (shared defaults already merged in — see `resolveApplicationSubmit`'s
+   * `mergeDefaultVariablesIntoEnvironments`); on disk only its `overridesOnly()` subset is written,
+   * alongside a `<<: *DefaultVariables` alias (see `buildAppConfigNode`). UC042's editor exposes
+   * that overrides-only subset as an editable per-environment Variables list;
+   * `ensureOauth2ScopeIdVariablesInEnvironments` guarantees a referenced key exists here, generating
+   * a GUID for it if missing, on every save.
    */
   Variables: Record<string, string>;
 }
@@ -392,7 +396,14 @@ export function buildAppConfigNode(doc: YAML.Document, appConfig: AppConfig): YA
   return node;
 }
 
-function overridesOnly(variables: Record<string, string>, defaults: Record<string, string>): Record<string, string> {
+/**
+ * An environment's *own* `Variables` — the subset of its full effective set (see
+ * `buildAppConfigNode`) that isn't just an inherited shared default: a key that's new, or present
+ * in the defaults but with a different value. This is what `buildAppConfigNode` writes to disk
+ * alongside the `<<` alias, and what UC042's editor shows as that environment's editable Variables
+ * list (the shared defaults are edited once, in the top-level Variables section).
+ */
+export function overridesOnly(variables: Record<string, string>, defaults: Record<string, string>): Record<string, string> {
   const result: Record<string, string> = {};
   for (const [key, value] of Object.entries(variables)) {
     if (defaults[key] !== value) {

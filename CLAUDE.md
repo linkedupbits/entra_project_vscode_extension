@@ -303,14 +303,29 @@ These came out of an explicit planning pass with the user and should not be sile
   environment's own `Variables` map (see `EnvironmentEntry.Variables` below), generating a fresh GUID
   for any environment that doesn't already have one — never overwriting one that does.
   `EnvironmentEntry` (`types.ts`) grew a `Variables: Record<string, string>` field for exactly this —
-  each environment's own values, distinct from `AppConfig.yaml`'s shared top-level `Variables` — with
-  no dedicated add/remove-row UI of its own yet (round-tripped via a hidden, JSON-encoded field per
-  Environment row in `applicationEditorHtml.ts`, carried through unedited by that row's own UI).
-  `resolveApplicationSubmit()`'s `mergeDefaultVariablesIntoEnvironments()` always copies the shared
-  top-level `Variables` into every environment's own map (environment-specific values win on a key
-  clash) before the id-variable-name pass runs, so `EnvironmentEntry.Variables` in memory always
-  holds each environment's *full effective* set — this mirrors, and is meant to have the same
-  practical effect as, hand-authoring `Variables: &DefaultVariables` plus per-environment
+  each environment's own values, distinct from `AppConfig.yaml`'s shared top-level `Variables`. The
+  whole **Environments** section is a collapsible box (collapsed by default, its summary carrying a
+  live count), and each environment inside it is *itself* a collapsible `<details>` card with
+  labelled fields — the same treatment (and shared CSS/`refresh*Summaries()` machinery, plus the
+  same `.environment-card` addition to `onRemoveClick`'s `closest()` selector) as the Exposed API
+  scopes / Federated Credentials cards. Every one of these collapsible summaries draws its own
+  `::before` disclosure chevron (rotated under `details[open]`) because the native `<summary>`
+  marker disappears the moment a summary is `display: flex` — a real gotcha, don't remove those
+  rules thinking the browser will fall back to the default triangle. Each environment card carries a **Variables owned by this
+  environment** key/value list, editable just like the top-level shared Variables; it's populated
+  with `types.ts`'s now-exported `overridesOnly(env.Variables, appConfig.Variables)` — i.e. the
+  environment's own keys only, since the shared defaults are edited once up top. `EnvironmentRowInput.variables`
+  is a `VariableRowInput[]` (was a carried-through `Record` behind a hidden JSON field);
+  `resolveApplicationSubmit` runs it (and the top-level list) through one shared `resolveVariableRows()`
+  helper — a blank row is a spacer, a keyless value or a duplicate key blocks the save with a
+  `missing`/`duplicateEnvironmentVariableKey` (naming the environment) or the plain
+  `missing`/`duplicateVariableKey`. Per-environment `+ Add variable` buttons have no fixed id (N of
+  them, addable at runtime) so they're handled by one delegated `form` click listener rather than
+  wired individually. `resolveApplicationSubmit()`'s `mergeDefaultVariablesIntoEnvironments()` then
+  copies the shared top-level `Variables` into every environment's own map (environment-specific
+  values win on a key clash) before the id-variable-name pass runs, so `EnvironmentEntry.Variables`
+  in memory always holds each environment's *full effective* set — this mirrors, and is meant to
+  have the same practical effect as, hand-authoring `Variables: &DefaultVariables` plus per-environment
   `<<: *DefaultVariables` (UC040's own convention, restored on user request after an earlier version
   of this merge just wrote flattened literal values and lost the anchor/alias syntax entirely). The
   actual anchor/alias *is* reconstructed on disk: `types.ts`'s `buildAppConfigNode()` builds

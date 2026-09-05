@@ -1,5 +1,12 @@
 import * as crypto from 'crypto';
-import { ApplicationFiles, AppConfig, RequiredPermission, Oauth2PermissionScopeEntry, FederatedCredentialEntry } from './types';
+import {
+  ApplicationFiles,
+  AppConfig,
+  RequiredPermission,
+  Oauth2PermissionScopeEntry,
+  FederatedCredentialEntry,
+  overridesOnly,
+} from './types';
 import { MICROSOFT_GRAPH_APP_ID, parseResourceAppId, buildDependencyReference } from './resourceAppIdReference';
 import { parseEnvironmentVariableIdName } from './oauth2ScopeIdReference';
 import { PermissionOption } from './permissionIdOptions';
@@ -33,28 +40,69 @@ function variableRowsHtml(appConfig: AppConfig): string {
     .join('');
 }
 
+/** The line shown in an environment's `<summary>` while its card is collapsed — see environmentRowsHtml. */
+function envSummaryLabel(name: string, environmentCode: string): string {
+  const text = name || '(unnamed)';
+  return environmentCode ? `${text} — ${environmentCode}` : text;
+}
+
+function envVariableRowsHtml(variables: Record<string, string>): string {
+  return Object.entries(variables)
+    .map(
+      ([key, value]) => `
+      <div class="row env-var-row">
+        <input type="text" class="env-var-key" placeholder="Key" value="${escapeHtml(key)}" />
+        <input type="text" class="env-var-value" placeholder="Value" value="${escapeHtml(value)}" />
+        <button type="button" class="remove-row-btn" aria-label="Remove">✕</button>
+      </div>`
+    )
+    .join('');
+}
+
 /**
- * `env.Variables` (see EnvironmentEntry's doc comment — distinct from AppConfig's own top-level
- * `Variables`) has no dedicated editing UI of its own yet, so it's round-tripped here as a hidden,
- * JSON-encoded field rather than dropped: unedited by this row, but preserved on save (and
- * added to by `ensureOauth2ScopeIdVariablesInEnvironments` in applicationFormLogic.ts) rather than
- * silently lost every time this form is saved.
+ * Each environment renders as a collapsible `<details>` card (collapsed by default when loaded,
+ * expanded when newly added — the same treatment as the Exposed API scopes / Federated Credentials
+ * cards, and the whole section is wrapped in its own collapsible box too). `<summary>` shows the
+ * environment's `name` and `environment_code`, kept live by `refreshEnvironmentSummaries()` in this
+ * file's webview script. The card body carries the four fixed fields plus this environment's *own*
+ * Variables — `overridesOnly(env.Variables, appConfig.Variables)`, since the shared defaults are
+ * edited once in the top-level Variables section and `EnvironmentEntry.Variables` in memory holds
+ * the full merged set (see its doc comment).
  */
 function environmentRowsHtml(appConfig: AppConfig): string {
-  return appConfig.Environments.map(
-    (env) => `
-    <div class="row environment-row">
-      <input type="hidden" class="env-variables" value="${escapeHtml(JSON.stringify(env.Variables))}" />
-      <input type="text" class="env-name" placeholder="Name (e.g. Dev)" value="${escapeHtml(env.name)}" />
-      <input type="text" class="env-publisherDomain" placeholder="Publisher domain" value="${escapeHtml(env.publisherDomain)}" />
-      <select class="env-tenancy_type">
-        <option value="workforce" ${selectedAttr(env.tenancy_type, 'workforce')}>Workforce</option>
-        <option value="ciam" ${selectedAttr(env.tenancy_type, 'ciam')}>CIAM</option>
-      </select>
-      <input type="text" class="env-environment_code" placeholder="Environment code" value="${escapeHtml(env.environment_code)}" />
-      <button type="button" class="remove-row-btn" aria-label="Remove">✕</button>
-    </div>`
-  ).join('');
+  return appConfig.Environments.map((env) => {
+    const ownVariables = overridesOnly(env.Variables, appConfig.Variables);
+    return `
+    <details class="environment-card">
+      <summary class="environment-summary">
+        <span class="environment-summary-label">${escapeHtml(envSummaryLabel(env.name, env.environment_code))}</span>
+        <button type="button" class="remove-row-btn" aria-label="Remove">✕</button>
+      </summary>
+      <div class="environment-body">
+        <label>Name
+          <input type="text" class="env-name" placeholder="e.g. Dev" value="${escapeHtml(env.name)}" />
+        </label>
+        <label>Publisher domain
+          <input type="text" class="env-publisherDomain" value="${escapeHtml(env.publisherDomain)}" />
+        </label>
+        <label>Tenancy type
+          <select class="env-tenancy_type">
+            <option value="workforce" ${selectedAttr(env.tenancy_type, 'workforce')}>Workforce</option>
+            <option value="ciam" ${selectedAttr(env.tenancy_type, 'ciam')}>CIAM</option>
+          </select>
+        </label>
+        <label>Environment code
+          <input type="text" class="env-environment_code" value="${escapeHtml(env.environment_code)}" />
+        </label>
+        <div class="env-vars-subsection">
+          <div class="env-vars-heading">Variables owned by this environment</div>
+          <div class="hint">The shared Variables from the section above apply to every environment already — only add here what's specific to this one.</div>
+          <div class="env-var-rows">${envVariableRowsHtml(ownVariables)}</div>
+          <button type="button" class="add-row-btn add-env-var-btn">+ Add variable</button>
+        </div>
+      </div>
+    </details>`;
+  }).join('');
 }
 
 /**
@@ -376,13 +424,13 @@ export function getHtml(
   }
   .row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
   .row input, .row select { flex: 1; min-width: 0; }
-  .oauth2-scope-card, .fedcred-card {
+  .oauth2-scope-card, .fedcred-card, .environment-card {
     display: block;
     border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
     border-radius: 3px;
     margin-bottom: 8px;
   }
-  .oauth2-scope-summary, .fedcred-summary {
+  .oauth2-scope-summary, .fedcred-summary, .environment-summary {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -390,7 +438,7 @@ export function getHtml(
     padding: 8px 12px;
     cursor: pointer;
   }
-  .oauth2-scope-summary-label, .fedcred-summary-label {
+  .oauth2-scope-summary-label, .fedcred-summary-label, .environment-summary-label {
     flex: 1;
     min-width: 0;
     overflow: hidden;
@@ -399,14 +447,14 @@ export function getHtml(
     font-family: var(--vscode-editor-font-family, monospace);
     font-size: 0.9em;
   }
-  .oauth2-scope-body, .fedcred-body {
+  .oauth2-scope-body, .fedcred-body, .environment-body {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px 16px;
     padding: 4px 12px 14px;
     border-top: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
   }
-  .oauth2-scope-body label, .fedcred-body label {
+  .oauth2-scope-body label, .fedcred-body label, .environment-body label {
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -414,7 +462,9 @@ export function getHtml(
     font-weight: 600;
     font-size: 0.85em;
   }
-  .oauth2-scope-body label > input, .oauth2-scope-body label > select, .fedcred-body label > input {
+  .oauth2-scope-body label > input, .oauth2-scope-body label > select,
+  .fedcred-body label > input,
+  .environment-body label > input, .environment-body label > select {
     font-weight: normal;
     font-size: 1em;
   }
@@ -425,6 +475,45 @@ export function getHtml(
     color: var(--vscode-descriptionForeground);
   }
   .oauth2-scope-enabled-label input { width: auto; }
+  .section-card { display: block; margin: 28px 0 4px; }
+  .section-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 1.05em;
+    font-weight: 600;
+    padding: 4px 0 6px;
+    border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+  }
+  .section-count { color: var(--vscode-descriptionForeground); font-weight: normal; font-size: 0.85em; }
+  .section-body { padding-top: 10px; }
+  /* The native <summary> disclosure marker disappears once a summary is display:flex, so every
+     collapsible summary draws its own chevron here — pointing right when closed, down when open. */
+  .section-summary, .oauth2-scope-summary, .fedcred-summary, .environment-summary { list-style: none; }
+  .section-summary::-webkit-details-marker, .oauth2-scope-summary::-webkit-details-marker,
+  .fedcred-summary::-webkit-details-marker, .environment-summary::-webkit-details-marker { display: none; }
+  .section-summary::before, .oauth2-scope-summary::before,
+  .fedcred-summary::before, .environment-summary::before {
+    content: "";
+    flex: 0 0 auto;
+    width: 0;
+    height: 0;
+    border: 4px solid transparent;
+    border-left-color: currentColor;
+    margin-right: 2px;
+    transition: transform 0.12s ease;
+  }
+  details[open] > .section-summary::before, details[open] > .oauth2-scope-summary::before,
+  details[open] > .fedcred-summary::before, details[open] > .environment-summary::before {
+    transform: rotate(90deg);
+  }
+  .env-vars-subsection { grid-column: 1 / -1; margin-top: 4px; }
+  .env-vars-subsection > .env-vars-heading {
+    font-weight: 600;
+    font-size: 0.85em;
+    margin-bottom: 4px;
+  }
   .perm-resourceAppId-wrap, .perm-id-cell { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; }
   .warning-icon {
     flex: 0 0 auto;
@@ -496,11 +585,15 @@ export function getHtml(
     <button type="button" class="add-row-btn" id="addVariableBtn">+ Add variable</button>
     <div class="error" id="variablesError"></div>
 
-    <h2>Environments</h2>
-    <div class="hint">One deployment target per row.</div>
-    <div id="environmentRows">${environmentRowsHtml(appConfig)}</div>
-    <button type="button" class="add-row-btn" id="addEnvironmentBtn">+ Add environment</button>
-    <div class="error" id="environmentsError"></div>
+    <details class="section-card" id="environmentsSection">
+      <summary class="section-summary"><span>Environments</span><span class="section-count" id="environmentCount">(${appConfig.Environments.length})</span></summary>
+      <div class="section-body">
+        <div class="hint">One deployment target per card — collapsed by default, click a card to expand it.</div>
+        <div id="environmentRows">${environmentRowsHtml(appConfig)}</div>
+        <button type="button" class="add-row-btn" id="addEnvironmentBtn">+ Add environment</button>
+        <div class="error" id="environmentsError"></div>
+      </div>
+    </details>
 
     <h2>Dependencies</h2>
     <div class="hint">Other applications this one depends on for deploy sequencing. Reference one in a template as <code>{{ dependency_refs.&lt;Key&gt;.applicationId }}</code>, resolved once the referenced application has been deployed.</div>
@@ -658,17 +751,39 @@ export function getHtml(
     }
 
     function addEnvironmentRow() {
-      appendRow(
+      // Starts expanded (a loaded environment starts collapsed) — same reasoning as addOauth2ScopeRow.
+      var row = appendRow(
         environmentRows,
-        'row environment-row',
-        '<input type="hidden" class="env-variables" value="{}" />' +
-          '<input type="text" class="env-name" placeholder="Name (e.g. Dev)" />' +
-          '<input type="text" class="env-publisherDomain" placeholder="Publisher domain" />' +
-          '<select class="env-tenancy_type">' +
-          '<option value="workforce">Workforce</option>' +
-          '<option value="ciam">CIAM</option>' +
-          '</select>' +
-          '<input type="text" class="env-environment_code" placeholder="Environment code" />' +
+        'environment-card',
+        '<summary class="environment-summary">' +
+          '<span class="environment-summary-label">(unnamed)</span>' +
+          '<button type="button" class="remove-row-btn" aria-label="Remove">✕</button>' +
+          '</summary>' +
+          '<div class="environment-body">' +
+          '<label>Name<input type="text" class="env-name" placeholder="e.g. Dev" /></label>' +
+          '<label>Publisher domain<input type="text" class="env-publisherDomain" /></label>' +
+          '<label>Tenancy type<select class="env-tenancy_type">' +
+          '<option value="workforce">Workforce</option><option value="ciam">CIAM</option>' +
+          '</select></label>' +
+          '<label>Environment code<input type="text" class="env-environment_code" /></label>' +
+          '<div class="env-vars-subsection">' +
+          '<div class="env-vars-heading">Variables owned by this environment</div>' +
+          '<div class="hint">The shared Variables from the section above apply to every environment already — only add here what\\'s specific to this one.</div>' +
+          '<div class="env-var-rows"></div>' +
+          '<button type="button" class="add-row-btn add-env-var-btn">+ Add variable</button>' +
+          '</div>' +
+          '</div>',
+        'details'
+      );
+      row.open = true;
+    }
+
+    function addEnvVariableRow(container) {
+      appendRow(
+        container,
+        'row env-var-row',
+        '<input type="text" class="env-var-key" placeholder="Key" />' +
+          '<input type="text" class="env-var-value" placeholder="Value" />' +
           '<button type="button" class="remove-row-btn" aria-label="Remove">✕</button>'
       );
     }
@@ -787,6 +902,28 @@ export function getHtml(
         var subject = card.querySelector('.fedcred-subject').value;
         card.querySelector('.fedcred-summary-label').textContent = fedcredSummaryLabel(name, subject);
       });
+    }
+
+    // Mirrors applicationEditorHtml.ts's envSummaryLabel() — duplicated here for the same reason as
+    // the other server/client pairs in this script.
+    function envSummaryLabel(name, environmentCode) {
+      var text = name || '(unnamed)';
+      return environmentCode ? text + ' — ' + environmentCode : text;
+    }
+
+    // Keeps each environment card's collapsed-state summary (and the section's count) in sync with
+    // its own Name/Environment code fields, so a specific environment stays identifiable collapsed.
+    function refreshEnvironmentSummaries() {
+      var cards = document.querySelectorAll('.environment-card');
+      cards.forEach(function (card) {
+        var name = card.querySelector('.env-name').value;
+        var code = card.querySelector('.env-environment_code').value;
+        card.querySelector('.environment-summary-label').textContent = envSummaryLabel(name, code);
+      });
+      var count = document.getElementById('environmentCount');
+      if (count) {
+        count.textContent = '(' + cards.length + ')';
+      }
     }
 
     // Mirrors applicationEditorHtml.ts's permissionIdFieldHtml() — duplicated here for the same
@@ -946,13 +1083,22 @@ export function getHtml(
     }
 
     document.querySelectorAll('.remove-row-btn').forEach(function (btn) {
-      // The oauth2-scope-card / fedcred-card entries are collapsible details elements, not rows —
-      // matching only .row here would hand onRemoveClick a null and throw, halting the rest of
-      // this script's setup (which is what broke every "+ Add ..." button once those cards existed).
-      onRemoveClick(btn.closest('.row, .oauth2-scope-card, .fedcred-card'));
+      // The oauth2-scope-card / fedcred-card / environment-card entries are collapsible details
+      // elements, not rows — matching only .row here would hand onRemoveClick a null and throw,
+      // halting the rest of this script's setup (which is what broke every "+ Add ..." button once
+      // those cards existed). .row is still listed first so a nested env-var row's own button
+      // (which lives inside an environment-card) resolves to just that row, not the whole card.
+      onRemoveClick(btn.closest('.row, .oauth2-scope-card, .fedcred-card, .environment-card'));
     });
     document.getElementById('addVariableBtn').addEventListener('click', addVariableRow);
     document.getElementById('addEnvironmentBtn').addEventListener('click', addEnvironmentRow);
+    // Per-environment "+ Add variable" buttons appear N times and can be added dynamically, so
+    // they're handled by delegation rather than wired individually like the section-level ones.
+    form.addEventListener('click', function (e) {
+      if (e.target.classList.contains('add-env-var-btn')) {
+        addEnvVariableRow(e.target.closest('.environment-card').querySelector('.env-var-rows'));
+      }
+    });
     document.getElementById('addDependencyBtn').addEventListener('click', addDependencyRow);
     document.getElementById('addRedirectUriBtn').addEventListener('click', addRedirectUriRow);
     document.getElementById('addPermissionBtn').addEventListener('click', addPermissionRow);
@@ -985,18 +1131,18 @@ export function getHtml(
           value: row.querySelector('.var-value').value,
         };
       });
-      const environments = Array.from(document.querySelectorAll('.environment-row')).map(function (row) {
-        let variables = {};
-        try {
-          variables = JSON.parse(row.querySelector('.env-variables').value || '{}');
-        } catch (e) {
-          variables = {};
-        }
+      const environments = Array.from(document.querySelectorAll('.environment-card')).map(function (card) {
+        const variables = Array.from(card.querySelectorAll('.env-var-row')).map(function (r) {
+          return {
+            key: r.querySelector('.env-var-key').value,
+            value: r.querySelector('.env-var-value').value,
+          };
+        });
         return {
-          name: row.querySelector('.env-name').value,
-          publisherDomain: row.querySelector('.env-publisherDomain').value,
-          tenancy_type: row.querySelector('.env-tenancy_type').value,
-          environment_code: row.querySelector('.env-environment_code').value,
+          name: card.querySelector('.env-name').value,
+          publisherDomain: card.querySelector('.env-publisherDomain').value,
+          tenancy_type: card.querySelector('.env-tenancy_type').value,
+          environment_code: card.querySelector('.env-environment_code').value,
           variables: variables,
         };
       });
@@ -1062,11 +1208,12 @@ export function getHtml(
     // document is marked dirty (VS Code's native "unsaved changes" tab indicator) as soon as
     // anything differs from what's on disk — not only when Save is explicitly clicked. Also keeps
     // the Required Permissions dropdowns in sync with the current Dependencies rows, and each
-    // Exposed API scope / federated credential card's collapsed summary in sync with its own
-    // fields, before the snapshot below is taken (see refreshPermissionResourceAppIdOptions/
-    // refreshOauth2ScopeSummaries/refreshFedCredSummaries).
+    // environment / Exposed API scope / federated credential card's collapsed summary in sync with
+    // its own fields, before the snapshot below is taken (see refreshPermissionResourceAppIdOptions/
+    // refreshEnvironmentSummaries/refreshOauth2ScopeSummaries/refreshFedCredSummaries).
     function notifyEdit() {
       refreshPermissionResourceAppIdOptions();
+      refreshEnvironmentSummaries();
       refreshOauth2ScopeSummaries();
       refreshFedCredSummaries();
       vscode.postMessage({ type: 'edit', input: buildInputSnapshot() });
@@ -1111,6 +1258,14 @@ export function getHtml(
         environmentsError.classList.add('visible');
       } else if (message.kind === 'duplicateEnvironmentName') {
         environmentsError.textContent = 'The environment name "' + message.name + '" is used more than once.';
+        environmentsError.classList.add('visible');
+      } else if (message.kind === 'missingEnvironmentVariableKey') {
+        environmentsError.textContent =
+          'A variable in environment "' + message.environment + '" needs a key (remove any row you don\\'t need).';
+        environmentsError.classList.add('visible');
+      } else if (message.kind === 'duplicateEnvironmentVariableKey') {
+        environmentsError.textContent =
+          'Environment "' + message.environment + '" uses the variable key "' + message.key + '" more than once.';
         environmentsError.classList.add('visible');
       } else if (message.kind === 'missingDependencyKey') {
         dependenciesError.textContent = 'Every dependency needs a reference key (remove any row you don\\'t need).';

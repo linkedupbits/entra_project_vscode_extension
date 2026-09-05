@@ -26,7 +26,13 @@ const populatedFiles: ApplicationFiles = {
     ...emptyAppConfig(),
     Variables: { owner_email: 'team@example.com' },
     Environments: [
-      { name: 'Dev', publisherDomain: 'contoso.example.com', tenancy_type: 'ciam', environment_code: 'dev', Variables: {} },
+      {
+        name: 'Dev',
+        publisherDomain: 'contoso.example.com',
+        tenancy_type: 'ciam',
+        environment_code: 'dev',
+        Variables: { owner_email: 'team@example.com', MyScopeId: '11111111-1111-1111-1111-111111111111' },
+      },
     ],
     Dependencies: { Dep1: { AppName: 'other-app' } },
   },
@@ -137,6 +143,7 @@ function runScriptWithStubDom(scriptBody: string, afterRun?: (run: StubRun) => v
         return [
           { closest: (s: string) => (s.includes('oauth2-scope-card') ? makeEl() : null) },
           { closest: (s: string) => (s.includes('fedcred-card') ? makeEl() : null) },
+          { closest: (s: string) => (s.includes('environment-card') ? makeEl() : null) },
           { closest: (s: string) => (s.includes('.row') ? makeEl() : null) },
         ];
       }
@@ -184,7 +191,7 @@ const ADD_BUTTON_IDS = [
 // (or the initial-render markup) requires the appended element to carry.
 const ADD_BUTTON_EXPECTATIONS: Record<string, { container: string; requiredClass: string }> = {
   addVariableBtn: { container: 'variableRows', requiredClass: 'variable-row' },
-  addEnvironmentBtn: { container: 'environmentRows', requiredClass: 'environment-row' },
+  addEnvironmentBtn: { container: 'environmentRows', requiredClass: 'environment-card' },
   addDependencyBtn: { container: 'dependencyRows', requiredClass: 'dependency-row' },
   addRedirectUriBtn: { container: 'redirectUriRows', requiredClass: 'redirecturi-row' },
   addPermissionBtn: { container: 'permissionRows', requiredClass: 'permission-row' },
@@ -250,5 +257,27 @@ describe('getHtml — generated webview script', () => {
     expect(html).toContain('access_as_user — MyScopeId');
     expect(html).toContain('<details class="fedcred-card">');
     expect(html).toContain('dev-deploy — repo:contoso/sample:environment:dev');
+  });
+
+  it('wraps Environments in a collapsible section (collapsed by default) and each environment in a collapsible card', () => {
+    const html = getHtml('sample', populatedFiles, ['other-app'], permissionOptions);
+    expect(html).toContain('<details class="section-card" id="environmentsSection">');
+    expect(html).not.toContain('id="environmentsSection" open');
+    expect(html).toContain('<details class="environment-card">');
+    expect(html).toContain('Dev — dev'); // environment summary label (name — environment_code)
+    // every collapsible summary draws its own disclosure chevron (the native <summary> marker
+    // vanishes once the summary is display:flex)
+    expect(html).toContain('.section-summary::before');
+    expect(html).toContain('details[open] > .section-summary::before');
+  });
+
+  it("shows an environment's own Variables (overrides only, not inherited shared defaults)", () => {
+    const html = getHtml('sample', populatedFiles, ['other-app'], permissionOptions);
+    // owner_email is a shared default — it must NOT be repeated inside the environment card
+    const envCardStart = html.indexOf('<details class="environment-card">');
+    const envCardEnd = html.indexOf('</details>', envCardStart);
+    const envCardHtml = html.slice(envCardStart, envCardEnd);
+    expect(envCardHtml).toContain('value="MyScopeId"');
+    expect(envCardHtml).not.toContain('value="owner_email"');
   });
 });

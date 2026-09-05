@@ -3,7 +3,7 @@ business_unit: Funds
 Variables: &DefaultVariables
   owner_email: platformteam@example.com
 Environments:
-  - name: Dev
+  - name: Development
     publisherDomain: contoso-dev.onmicrosoft.com
     tenancy_type: workforce
     environment_code: dev
@@ -12,7 +12,7 @@ Environments:
       owner_email: platformteam2@example.com
       MyScopeId: 58bdbfaf-6627-489e-a2fd-74e62a302809
       SecondScope: 48460e95-9910-4173-a8ba-4b0e5ba81101
-  - name: Prod
+  - name: Producion
     publisherDomain: contoso.onmicrosoft.com
     tenancy_type: workforce
     environment_code: prod
