@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
+*.tsbuildinfo
+
+# Coverage reports
+coverage/
+
+# Packaged extension
+*.vsix
+
+# Extension test runs
+.vscode-test/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS/editor cruft
+.DS_Store
+
+temp/*

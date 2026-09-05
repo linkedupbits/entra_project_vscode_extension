@@ -1,0 +1,38 @@
+import { defineConfig } from 'vitest/config';
+import path from 'node:path';
+
+export default defineConfig({
+  resolve: {
+    alias: {
+      // No real 'vscode' package exists outside the Extension Host — see src/test/vscodeMock.ts.
+      // Only affects test runs; tsc and the esbuild extension bundle both still resolve 'vscode'
+      // normally (ambient @types/vscode for tsc, external for esbuild).
+      vscode: path.resolve(import.meta.dirname, 'src/test/vscodeMock.ts'),
+    },
+  },
+  test: {
+    include: ['src/**/*.test.ts'],
+    setupFiles: ['src/test/setup.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      include: ['src/**/*.ts'],
+      exclude: [
+        'src/**/*.test.ts',
+        'src/test/**',
+        // NonFunctionalRequirements.md's coverage requirement explicitly exempts thin VS Code
+        // glue: activation wiring and webview HTML templates. Both of these files are exactly
+        // that — their actual decision logic lives in connectionFormLogic.ts and
+        // resolveConnectionArg.ts respectively, which ARE covered.
+        'src/extension.ts',
+        'src/connections/connectionFormPanel.ts',
+      ],
+      thresholds: {
+        statements: 95,
+        branches: 90,
+        functions: 95,
+        lines: 95,
+      },
+    },
+  },
+});

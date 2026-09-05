@@ -1,0 +1,199 @@
+{
+  "name": "entra-artifacts",
+  "displayName": "Entra Artifacts",
+  "description": "Browse, connect to, and download Microsoft Entra artifacts as a local, version-controllable project structure.",
+  "version": "0.0.1",
+  "publisher": "entra-artifacts-project",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "entra",
+          "title": "Entra",
+          "icon": "resources/entra-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "entra": [
+        {
+          "id": "entraTree",
+          "name": "Entra"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "entra.addConnection",
+        "title": "Add Connection",
+        "category": "Entra",
+        "icon": "$(add)"
+      },
+      {
+        "command": "entra.editConnection",
+        "title": "Edit Connection...",
+        "category": "Entra"
+      },
+      {
+        "command": "entra.connect",
+        "title": "Connect",
+        "category": "Entra"
+      },
+      {
+        "command": "entra.disconnect",
+        "title": "Disconnect",
+        "category": "Entra"
+      },
+      {
+        "command": "entra.refreshConnections",
+        "title": "Refresh",
+        "category": "Entra",
+        "icon": "$(refresh)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "entra.addConnection",
+          "when": "view == entraTree",
+          "group": "navigation@1"
+        },
+        {
+          "command": "entra.refreshConnections",
+          "when": "view == entraTree",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "entra.addConnection",
+          "when": "view == entraTree && viewItem == connectionsRoot",
+          "group": "inline"
+        },
+        {
+          "command": "entra.connect",
+          "when": "view == entraTree && viewItem == connection-disconnected",
+          "group": "inline"
+        },
+        {
+          "command": "entra.disconnect",
+          "when": "view == entraTree && viewItem == connection-connected",
+          "group": "inline"
+        },
+        {
+          "command": "entra.editConnection",
+          "when": "view == entraTree && viewItem =~ /^connection-/",
+          "group": "1_modification"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Entra Artifacts",
+      "properties": {
+        "entra.artifactsRootFolder": {
+          "type": "string",
+          "default": "entra",
+          "description": "Folder (relative to the workspace root) where connections.yaml and downloaded artifacts are stored."
+        },
+        "entra.clientId": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Default Azure AD (Entra ID) application (client) ID used to authenticate, unless a connection provides its own override. Required before connecting to any tenant — no default is provided, since this must be an application registration you control or trust."
+        },
+        "entra.authMode": {
+          "type": "string",
+          "enum": [
+            "interactive",
+            "deviceCode"
+          ],
+          "enumDescriptions": [
+            "Sign in via a local loopback redirect and the system browser.",
+            "Show a code to enter on any device — for environments where a local browser flow isn't available (e.g. remote SSH)."
+          ],
+          "default": "interactive",
+          "description": "How to sign in to a connection."
+        }
+      }
+    },
+    "problemMatchers": [
+      {
+        "name": "esbuild",
+        "owner": "esbuild",
+        "source": "esbuild",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": [
+          {
+            "regexp": "^✘ \\[ERROR\\] (.+)$",
+            "message": 1
+          },
+          {
+            "regexp": "^\\s+(.+):(\\d+):(\\d+):$",
+            "file": 1,
+            "line": 2,
+            "column": 3
+          }
+        ]
+      },
+      {
+        "name": "esbuild-watch",
+        "owner": "esbuild",
+        "source": "esbuild",
+        "fileLocation": ["relative", "${workspaceFolder}"],
+        "pattern": [
+          {
+            "regexp": "^✘ \\[ERROR\\] (.+)$",
+            "message": 1
+          },
+          {
+            "regexp": "^\\s+(.+):(\\d+):(\\d+):$",
+            "file": 1,
+            "line": 2,
+            "column": 3
+          }
+        ],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^\\[watch\\] build started",
+          "endsPattern": "^\\[watch\\] build finished"
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "node esbuild.js --production",
+    "watch": "node esbuild.js --watch",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "coverage": "vitest run --coverage"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.0.0",
+    "@types/vscode": "^1.90.0",
+    "@vitest/coverage-v8": "^5.0.0",
+    "esbuild": "^0.28.0",
+    "eslint": "^10.0.0",
+    "typescript": ">=6.0.0 <6.1.0",
+    "typescript-eslint": "^8.69.0",
+    "vitest": "^5.0.0"
+  },
+  "dependencies": {
+    "@azure/msal-node": "^6.0.0",
+    "yaml": "^2.9.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

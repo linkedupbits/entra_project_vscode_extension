@@ -1,0 +1,63 @@
+{
+  "name": "entra-project-vscode-extension",
+  // Microsoft's prebuilt Node/TypeScript devcontainer image, pinned by Node major + Debian
+  // variant (not a generic base image + separate Node feature) — see NonFunctionalRequirements.md.
+  // "24-bookworm" is Node 24 "Krypton", the current Active LTS release as of 2026-09-05 (Node 20
+  // "Iron", used here previously, reached end-of-life in March 2026; Node 22 is now Maintenance
+  // LTS; Node 26 is Current but won't become LTS until October 2026). Only major-level tags like
+  // this get ongoing OS security patches from Microsoft (see the image's own README), so this is
+  // deliberately not pinned to an exact patch triplet. Bumping the major is a deliberate, manual
+  // action when a newer LTS is promoted — check https://nodejs.org/en/about/previous-releases.
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:24-bookworm",
+  // This image's non-root user is "node" (confirmed against the image's own README), not the
+  // "vscode" user used by the generic mcr.microsoft.com/devcontainers/base image.
+  "remoteUser": "node",
+
+  // Mount the workspace at the SAME absolute path inside the container as on the host, instead
+  // of the default "/workspaces/<folder>". Claude Code keys its per-project memory/session
+  // storage off the absolute workspace path — mount it anywhere else and the container sees a
+  // different project with no history, even once ~/.claude itself is shared (below).
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind,consistency=cached",
+  "workspaceFolder": "${localWorkspaceFolder}",
+
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+
+  // See NonFunctionalRequirements.md: dev happens in this container; Claude Code's
+  // knowledge/session data must be the SAME data as on the host, not a copy of it; the host
+  // user's SSH keys must be usable from inside the container.
+  "mounts": [
+    // Read-only: the container never writes back to the host's real ~/.ssh. setup.sh copies
+    // what's needed into a writable, correctly-permissioned ~/.ssh inside the container instead.
+    "source=${localEnv:HOME}/.ssh,target=/home/node/.ssh-host,type=bind,readonly",
+    // Bind mounts of the host's REAL ~/.claude and ~/.claude.json, not a Docker named volume.
+    // A named volume starts empty on first use — it would only stop *future* rebuilds from
+    // losing session data, and would still leave every existing session (this one included)
+    // stranded on the host with nothing to copy it across. Bind-mounting the same paths means
+    // the host and the devcontainer are always looking at identical, live files: nothing to
+    // migrate, nothing to fall out of sync. (Trade-off: this container can now see Claude
+    // history from every project on this host, not just this one — the same visibility Claude
+    // already has when run directly on the host, so no new exposure, just no longer
+    // artificially siloed either.)
+    // Prerequisite: ~/.claude.json must already exist on the host (`touch ~/.claude.json` if
+    // it doesn't — e.g. Claude Code has never been run on this host before) — Docker mounts a
+    // fresh empty *directory* instead of a file if the bind source doesn't exist yet, which
+    // would break Claude Code and can't be fixed from inside the running container.
+    "source=${localEnv:HOME}/.claude,target=/home/node/.claude,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.claude.json,target=/home/node/.claude.json,type=bind,consistency=cached"
+  ],
+
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "redhat.vscode-yaml",
+        "anthropic.claude-code"
+      ]
+    }
+  }
+}

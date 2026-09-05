@@ -1,0 +1,14 @@
+.vscode/**
+src/**
+.gitignore
+esbuild.js
+tsconfig.json
+eslint.config.mjs
+**/*.map
+**/*.ts
+node_modules/**
+Requirements/**
+Architecture/**
+Example_Project/**
+.devcontainer/**
+CLAUDE.md
