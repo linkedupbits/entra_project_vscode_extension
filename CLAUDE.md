@@ -271,7 +271,24 @@ These came out of an explicit planning pass with the user and should not be sile
   `Application.yaml.j2`'s `api.oauth2PermissionScopes` (`Oauth2PermissionScopeEntry` in `types.ts`,
   fields matching Graph's `permissionScope` type exactly, one row per scope, no
   flatten/regroup needed since it's already a flat Graph array) — delegated scopes this application
-  *exposes*, rather than what it requests. Each row's Graph-required `id` (a GUID Graph uses to
+  *exposes*, rather than what it requests. Each scope renders as its own collapsible `<details>`
+  card (`oauth2PermissionScopeRowsHtml()`), not a single-line row like this section's siblings — one
+  scope has eight fields, several of them long free-text descriptions, so a flat row would wrap
+  unreadably. Collapsed is the default for a scope loaded from disk (no `open` attribute); a scope
+  added via **+ Add scope** starts expanded instead (`addOauth2ScopeRow()` sets `.open = true`),
+  since it needs immediate input. `<summary>` shows a live-updating one-line label (`Scope value` —
+  `ID variable name` if set) built by `oauth2ScopeSummaryLabel()`, kept in sync as those two fields
+  change by `refreshOauth2ScopeSummaries()` (called from `notifyEdit()`, same as
+  `refreshPermissionResourceAppIdOptions()`) — duplicated server/client exactly like the other
+  TS/webview-JS pairs in this file. Every field inside the card has a real `<label>` (implicit
+  association — `<label>text<input/></label>`, no generated `id`/`for` pair needed since rows are
+  cloned dynamically); the **Enabled** checkbox already used this pattern before the rest of the
+  card did. Putting the row's own remove button inside `<summary>` meant `onRemoveClick()` needed
+  `event.preventDefault()`/`stopPropagation()` — added unconditionally for all row types (harmless
+  for the others, since a `type="button"` has no default action to prevent anyway), since without
+  it a click on that button would also toggle the card's collapsed state before removing it.
+  `appendRow()` grew an optional `tagName` parameter (defaulting to `'div'`, as before) so this
+  section alone can build a `<details>` instead. Each row's Graph-required `id` (a GUID Graph uses to
   match a scope across updates) is generated automatically for a new/id-less row
   (`applicationEditorHtml.ts`'s `oauth2PermissionScopeRowsHtml()`/`addOauth2ScopeRow()`, via
   `crypto.randomUUID()`) and otherwise left alone — unless the row's optional **ID variable name**

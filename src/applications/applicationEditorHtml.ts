@@ -184,7 +184,22 @@ function requiredPermissionRowsHtml(
     .join('');
 }
 
+/** The line shown in a scope's `<summary>` while its card is collapsed — see oauth2PermissionScopeRowsHtml. */
+function oauth2ScopeSummaryLabel(value: string, idVariableName: string): string {
+  const text = value || '(no value)';
+  return idVariableName ? `${text} — ${idVariableName}` : text;
+}
+
 /**
+ * Each scope renders as a collapsible `<details>` card (collapsed by default — no `open` attribute
+ * — since a new application definition can expose many scopes and showing every field of every one
+ * at once would dwarf the rest of the form) rather than a single-line row: unlike this section's
+ * siblings, one scope carries eight fields, several of them long free-text descriptions, so a flat
+ * row would either wrap unreadably or force horizontal scrolling. `<summary>` (always visible, even
+ * collapsed) shows the scope's value and ID variable name so a specific scope can be found without
+ * expanding every card — kept in sync as those two fields are edited by `refreshOauth2ScopeSummaries()`
+ * in this file's webview script.
+ *
  * `scope.id` is generated here (not left blank) if a loaded entry didn't already have one — e.g. a
  * hand-authored `Application.yaml.j2` that omitted it — so the row always has a stable fallback id
  * to submit from its first render onward, without normalizeApplicationFields() itself needing to
@@ -199,24 +214,43 @@ function oauth2PermissionScopeRowsHtml(scopes: readonly Oauth2PermissionScopeEnt
       const id = scope.id || crypto.randomUUID();
       const idVariableName = parseEnvironmentVariableIdName(scope.id) ?? '';
       return `
-    <div class="row oauth2-scope-row oauth2-scope-row-grid">
-      <input type="hidden" class="oauth2-scope-id" value="${escapeHtml(id)}" />
-      <input type="text" class="oauth2-scope-value" placeholder="Scope value (e.g. Files.Read)" value="${escapeHtml(scope.value)}" />
-      <input type="text" class="oauth2-scope-idVariableName" placeholder="ID variable name (optional, e.g. MyScopeId)" value="${escapeHtml(idVariableName)}" title="If set, the scope's ID is written as {{ environment.Variables.<this> }} instead of a fixed GUID." />
-      <select class="oauth2-scope-type">
-        <option value="User" ${selectedAttr(scope.type, 'User')}>User (delegated)</option>
-        <option value="Admin" ${selectedAttr(scope.type, 'Admin')}>Admin only</option>
-      </select>
-      <label class="oauth2-scope-enabled-label">
-        <input type="checkbox" class="oauth2-scope-isEnabled" ${scope.isEnabled ? 'checked' : ''} />
-        Enabled
-      </label>
-      <input type="text" class="oauth2-scope-adminConsentDisplayName" placeholder="Admin consent display name" value="${escapeHtml(scope.adminConsentDisplayName)}" />
-      <input type="text" class="oauth2-scope-adminConsentDescription" placeholder="Admin consent description" value="${escapeHtml(scope.adminConsentDescription)}" />
-      <input type="text" class="oauth2-scope-userConsentDisplayName" placeholder="User consent display name" value="${escapeHtml(scope.userConsentDisplayName)}" />
-      <input type="text" class="oauth2-scope-userConsentDescription" placeholder="User consent description" value="${escapeHtml(scope.userConsentDescription)}" />
-      <button type="button" class="remove-row-btn" aria-label="Remove">✕</button>
-    </div>`;
+    <details class="oauth2-scope-card">
+      <summary class="oauth2-scope-summary">
+        <span class="oauth2-scope-summary-label">${escapeHtml(oauth2ScopeSummaryLabel(scope.value, idVariableName))}</span>
+        <button type="button" class="remove-row-btn" aria-label="Remove">✕</button>
+      </summary>
+      <div class="oauth2-scope-body">
+        <input type="hidden" class="oauth2-scope-id" value="${escapeHtml(id)}" />
+        <label>Scope value
+          <input type="text" class="oauth2-scope-value" placeholder="e.g. Files.Read" value="${escapeHtml(scope.value)}" />
+        </label>
+        <label>ID variable name
+          <input type="text" class="oauth2-scope-idVariableName" placeholder="Optional, e.g. MyScopeId" value="${escapeHtml(idVariableName)}" title="If set, the scope's ID is written as {{ environment.Variables.<this> }} instead of a fixed GUID." />
+        </label>
+        <label>Type
+          <select class="oauth2-scope-type">
+            <option value="User" ${selectedAttr(scope.type, 'User')}>User (delegated)</option>
+            <option value="Admin" ${selectedAttr(scope.type, 'Admin')}>Admin only</option>
+          </select>
+        </label>
+        <label class="oauth2-scope-enabled-label">
+          <input type="checkbox" class="oauth2-scope-isEnabled" ${scope.isEnabled ? 'checked' : ''} />
+          Enabled
+        </label>
+        <label>Admin consent display name
+          <input type="text" class="oauth2-scope-adminConsentDisplayName" value="${escapeHtml(scope.adminConsentDisplayName)}" />
+        </label>
+        <label>Admin consent description
+          <input type="text" class="oauth2-scope-adminConsentDescription" value="${escapeHtml(scope.adminConsentDescription)}" />
+        </label>
+        <label>User consent display name
+          <input type="text" class="oauth2-scope-userConsentDisplayName" value="${escapeHtml(scope.userConsentDisplayName)}" />
+        </label>
+        <label>User consent description
+          <input type="text" class="oauth2-scope-userConsentDescription" value="${escapeHtml(scope.userConsentDescription)}" />
+        </label>
+      </div>
+    </details>`;
     })
     .join('');
 }
@@ -315,14 +349,52 @@ export function getHtml(
   .row input, .row select { flex: 1; min-width: 0; }
   .fedcred-row-grid { flex-wrap: wrap; }
   .fedcred-row-grid input { flex: 1 1 30%; }
-  .oauth2-scope-row-grid { flex-wrap: wrap; }
-  .oauth2-scope-row-grid input[type="text"], .oauth2-scope-row-grid select { flex: 1 1 30%; }
-  .oauth2-scope-enabled-label {
+  .oauth2-scope-card {
+    display: block;
+    border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+    border-radius: 3px;
+    margin-bottom: 8px;
+  }
+  .oauth2-scope-summary {
     display: flex;
     align-items: center;
-    gap: 4px;
-    flex: 0 0 auto;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  .oauth2-scope-summary-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--vscode-editor-font-family, monospace);
     font-size: 0.9em;
+  }
+  .oauth2-scope-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 16px;
+    padding: 4px 12px 14px;
+    border-top: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+  }
+  .oauth2-scope-body label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 0;
+    font-weight: 600;
+    font-size: 0.85em;
+  }
+  .oauth2-scope-body label > input, .oauth2-scope-body label > select {
+    font-weight: normal;
+    font-size: 1em;
+  }
+  .oauth2-scope-enabled-label {
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
     color: var(--vscode-descriptionForeground);
   }
   .oauth2-scope-enabled-label input { width: auto; }
@@ -527,14 +599,19 @@ export function getHtml(
     }
 
     function onRemoveClick(row) {
-      row.querySelector('.remove-row-btn').addEventListener('click', function () {
+      row.querySelector('.remove-row-btn').addEventListener('click', function (e) {
+        // Some rows (the Exposed API scope cards) put this button inside a <summary>, where a
+        // plain click would otherwise also toggle that row's collapsed/expanded state — harmless
+        // to call on every other row type too, since a type="button" has no default action anyway.
+        e.preventDefault();
+        e.stopPropagation();
         row.remove();
         notifyEdit();
       });
     }
 
-    function appendRow(container, className, html) {
-      const row = document.createElement('div');
+    function appendRow(container, className, html, tagName) {
+      const row = document.createElement(tagName || 'div');
       row.className = className;
       row.innerHTML = html;
       container.appendChild(row);
@@ -651,6 +728,23 @@ export function getHtml(
       });
     }
 
+    // Mirrors applicationEditorHtml.ts's oauth2ScopeSummaryLabel() — duplicated here for the same
+    // reason as the other server/client pairs in this script.
+    function oauth2ScopeSummaryLabel(value, idVariableName) {
+      var text = value || '(no value)';
+      return idVariableName ? text + ' — ' + idVariableName : text;
+    }
+
+    // Keeps each Exposed API scope card's collapsed-state summary in sync with its own Scope
+    // value/ID variable name fields, so a specific scope stays identifiable without expanding it.
+    function refreshOauth2ScopeSummaries() {
+      document.querySelectorAll('.oauth2-scope-card').forEach(function (card) {
+        var value = card.querySelector('.oauth2-scope-value').value;
+        var idVariableName = card.querySelector('.oauth2-scope-idVariableName').value;
+        card.querySelector('.oauth2-scope-summary-label').textContent = oauth2ScopeSummaryLabel(value, idVariableName);
+      });
+    }
+
     // Mirrors applicationEditorHtml.ts's permissionIdFieldHtml() — duplicated here for the same
     // reason as the other server/client pairs in this script: it can't import that TS module.
     function permissionIdCellHtml(resourceAppId, permissionId) {
@@ -722,26 +816,49 @@ export function getHtml(
     }
 
     function addOauth2ScopeRow() {
-      appendRow(
+      // Starts expanded (unlike a loaded scope, which starts collapsed) — the user just asked to
+      // add one and almost certainly wants to fill it in immediately, not click to expand it first.
+      const row = appendRow(
         oauth2ScopeRows,
-        'row oauth2-scope-row oauth2-scope-row-grid',
-        '<input type="hidden" class="oauth2-scope-id" value="' + crypto.randomUUID() + '" />' +
-          '<input type="text" class="oauth2-scope-value" placeholder="Scope value (e.g. Files.Read)" />' +
-          '<input type="text" class="oauth2-scope-idVariableName" placeholder="ID variable name (optional, e.g. MyScopeId)" title="If set, the scope\\'s ID is written as {{ environment.Variables.<this> }} instead of a fixed GUID." />' +
+        'oauth2-scope-card',
+        '<summary class="oauth2-scope-summary">' +
+          '<span class="oauth2-scope-summary-label">(no value)</span>' +
+          '<button type="button" class="remove-row-btn" aria-label="Remove">✕</button>' +
+          '</summary>' +
+          '<div class="oauth2-scope-body">' +
+          '<input type="hidden" class="oauth2-scope-id" value="' + crypto.randomUUID() + '" />' +
+          '<label>Scope value' +
+          '<input type="text" class="oauth2-scope-value" placeholder="e.g. Files.Read" />' +
+          '</label>' +
+          '<label>ID variable name' +
+          '<input type="text" class="oauth2-scope-idVariableName" placeholder="Optional, e.g. MyScopeId" title="If set, the scope\\'s ID is written as {{ environment.Variables.<this> }} instead of a fixed GUID." />' +
+          '</label>' +
+          '<label>Type' +
           '<select class="oauth2-scope-type">' +
           '<option value="User">User (delegated)</option>' +
           '<option value="Admin">Admin only</option>' +
           '</select>' +
+          '</label>' +
           '<label class="oauth2-scope-enabled-label">' +
           '<input type="checkbox" class="oauth2-scope-isEnabled" checked />' +
           'Enabled' +
           '</label>' +
-          '<input type="text" class="oauth2-scope-adminConsentDisplayName" placeholder="Admin consent display name" />' +
-          '<input type="text" class="oauth2-scope-adminConsentDescription" placeholder="Admin consent description" />' +
-          '<input type="text" class="oauth2-scope-userConsentDisplayName" placeholder="User consent display name" />' +
-          '<input type="text" class="oauth2-scope-userConsentDescription" placeholder="User consent description" />' +
-          '<button type="button" class="remove-row-btn" aria-label="Remove">✕</button>'
+          '<label>Admin consent display name' +
+          '<input type="text" class="oauth2-scope-adminConsentDisplayName" />' +
+          '</label>' +
+          '<label>Admin consent description' +
+          '<input type="text" class="oauth2-scope-adminConsentDescription" />' +
+          '</label>' +
+          '<label>User consent display name' +
+          '<input type="text" class="oauth2-scope-userConsentDisplayName" />' +
+          '</label>' +
+          '<label>User consent description' +
+          '<input type="text" class="oauth2-scope-userConsentDescription" />' +
+          '</label>' +
+          '</div>',
+        'details'
       );
+      row.open = true;
     }
 
     function addFedCredRow() {
@@ -831,7 +948,7 @@ export function getHtml(
           type: row.querySelector('.perm-type').value,
         };
       });
-      const oauth2PermissionScopes = Array.from(document.querySelectorAll('.oauth2-scope-row')).map(function (row) {
+      const oauth2PermissionScopes = Array.from(document.querySelectorAll('.oauth2-scope-card')).map(function (row) {
         return {
           id: row.querySelector('.oauth2-scope-id').value,
           idVariableName: row.querySelector('.oauth2-scope-idVariableName').value,
@@ -879,10 +996,12 @@ export function getHtml(
     // Notifies the extension host of the current form state on every relevant change, so the
     // document is marked dirty (VS Code's native "unsaved changes" tab indicator) as soon as
     // anything differs from what's on disk — not only when Save is explicitly clicked. Also keeps
-    // the Required Permissions dropdowns in sync with the current Dependencies rows first (see
-    // refreshPermissionResourceAppIdOptions), so the snapshot below reflects that refreshed state.
+    // the Required Permissions dropdowns in sync with the current Dependencies rows, and each
+    // Exposed API scope card's collapsed summary in sync with its own fields, before the snapshot
+    // below is taken (see refreshPermissionResourceAppIdOptions/refreshOauth2ScopeSummaries).
     function notifyEdit() {
       refreshPermissionResourceAppIdOptions();
+      refreshOauth2ScopeSummaries();
       vscode.postMessage({ type: 'edit', input: buildInputSnapshot() });
     }
     // A Permission ID's options depend on its row's Resource App ID, and picking a known Permission
