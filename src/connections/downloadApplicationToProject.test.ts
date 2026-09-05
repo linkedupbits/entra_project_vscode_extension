@@ -25,12 +25,14 @@ function okData(overrides: Partial<ApplicationPreviewData> = {}): ApplicationPre
       value: {
         displayName: 'My App',
         signInAudience: 'AzureADMyOrg',
-        redirectUris: [],
         requiredPermissions: [],
         oauth2PermissionScopes: [],
       },
     },
     applicationPublisherDomain: '',
+    webRedirectUris: [],
+    publicClientRedirectUris: [],
+    spaRedirectUris: [],
     resourceApplications: {},
     federatedCredentials: { kind: 'ok', value: [] },
     servicePrincipal: {
@@ -100,6 +102,29 @@ describe('downloadApplicationToProject', () => {
     expect(savedFiles.appConfig.Environments).toEqual([
       { name: 'dev', publisherDomain: '', tenancy_type: '', environment_code: 'dev', Variables: {} },
     ]);
+  });
+
+  it("seeds a new Environments entry's Variables with the tenant application's redirect URIs", async () => {
+    vi.mocked(getApplicationsRootUri).mockReturnValue(rootUri as never);
+    const { store, save } = fakeStore();
+
+    await downloadApplicationToProject(
+      store,
+      identity,
+      okData({
+        webRedirectUris: ['https://dev.example.com/signin-oidc'],
+        publicClientRedirectUris: ['https://login.microsoftonline.com/common/oauth2/nativeclient'],
+        spaRedirectUris: ['https://dev.example.com'],
+      }),
+      connection
+    );
+
+    const [, savedFiles] = save.mock.calls[0];
+    expect(savedFiles.appConfig.Environments[0].Variables).toEqual({
+      web_redirectUris: ['https://dev.example.com/signin-oidc'],
+      publicClient_redirectURIs: ['https://login.microsoftonline.com/common/oauth2/nativeclient'],
+      spa_redirectURIs: ['https://dev.example.com'],
+    });
   });
 
   it('writes the Application file verbatim from the fetched data when none exists yet', async () => {
@@ -231,7 +256,6 @@ describe('downloadApplicationToProject', () => {
     const existingApplication: ApplicationFiles['application'] = {
       displayName: '{{ application_name }} ({{ name }})',
       signInAudience: 'AzureADMyOrg',
-      redirectUris: [],
       requiredPermissions: [],
       oauth2PermissionScopes: [],
     };

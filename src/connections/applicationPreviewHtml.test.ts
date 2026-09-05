@@ -9,12 +9,14 @@ function data(overrides: Partial<ApplicationPreviewData> = {}): ApplicationPrevi
       value: {
         displayName: 'My App',
         signInAudience: 'AzureADMyOrg',
-        redirectUris: [],
         requiredPermissions: [],
         oauth2PermissionScopes: [],
       },
     },
     applicationPublisherDomain: '',
+    webRedirectUris: [],
+    publicClientRedirectUris: [],
+    spaRedirectUris: [],
     resourceApplications: {},
     federatedCredentials: { kind: 'ok', value: [] },
     servicePrincipal: { kind: 'ok', value: { appId: '', appRoleAssignmentRequired: false, tags: [] } },
@@ -56,22 +58,27 @@ describe('buildApplicationPreviewHtml', () => {
     expect(html.match(/None/g)?.length).toBeGreaterThanOrEqual(3);
   });
 
-  it('lists redirect URIs and required permissions when present', () => {
+  it('lists the three redirect-URI categories and required permissions when present', () => {
     const html = buildApplicationPreviewHtml(
       data({
+        webRedirectUris: ['https://a.example.com/signin-oidc'],
+        publicClientRedirectUris: ['https://login.microsoftonline.com/common/oauth2/nativeclient'],
+        spaRedirectUris: ['https://spa.example.com'],
         application: {
           kind: 'ok',
           value: {
             displayName: 'My App',
             signInAudience: 'AzureADMyOrg',
-            redirectUris: ['https://a.example.com/signin-oidc'],
             requiredPermissions: [{ resourceAppId: '00000003-0000-0000-c000-000000000000', id: 'perm-1', type: 'Scope' }],
             oauth2PermissionScopes: [],
           },
         },
       })
     );
+    expect(html).toContain('Web redirect URIs');
     expect(html).toContain('https://a.example.com/signin-oidc');
+    expect(html).toContain('https://login.microsoftonline.com/common/oauth2/nativeclient');
+    expect(html).toContain('https://spa.example.com');
     expect(html).toContain('00000003-0000-0000-c000-000000000000');
     expect(html).toContain('perm-1');
   });
@@ -84,7 +91,6 @@ describe('buildApplicationPreviewHtml', () => {
           value: {
             displayName: 'My App',
             signInAudience: 'AzureADMyOrg',
-            redirectUris: [],
             requiredPermissions: [
               {
                 resourceAppId: '00000003-0000-0000-c000-000000000000',
@@ -116,7 +122,6 @@ describe('buildApplicationPreviewHtml', () => {
           value: {
             displayName: 'My App',
             signInAudience: 'AzureADMyOrg',
-            redirectUris: [],
             requiredPermissions: [{ resourceAppId: 'some-other-api', id: 'unknown-id', type: 'Scope' }],
             oauth2PermissionScopes: [],
           },
@@ -134,7 +139,6 @@ describe('buildApplicationPreviewHtml', () => {
           value: {
             displayName: 'My App',
             signInAudience: 'AzureADMyOrg',
-            redirectUris: [],
             requiredPermissions: [{ resourceAppId: 'some-other-api', id: 'unknown-id', type: 'Scope' }],
             oauth2PermissionScopes: [],
           },
@@ -155,7 +159,6 @@ describe('buildApplicationPreviewHtml', () => {
           value: {
             displayName: 'My App',
             signInAudience: 'AzureADMyOrg',
-            redirectUris: [],
             requiredPermissions: [],
             oauth2PermissionScopes: [
               {
@@ -186,7 +189,6 @@ describe('buildApplicationPreviewHtml', () => {
           value: {
             displayName: 'My App',
             signInAudience: 'AzureADMyOrg',
-            redirectUris: [],
             requiredPermissions: [],
             oauth2PermissionScopes: [
               {
@@ -284,7 +286,6 @@ describe('buildApplicationPreviewHtml', () => {
           value: {
             displayName: '<script>alert(1)</script>',
             signInAudience: 'AzureADMyOrg',
-            redirectUris: [],
             requiredPermissions: [],
             oauth2PermissionScopes: [],
           },

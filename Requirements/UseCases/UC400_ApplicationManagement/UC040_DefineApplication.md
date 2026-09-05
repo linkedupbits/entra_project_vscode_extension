@@ -78,8 +78,11 @@ Models the Entra App Registration. Structured to mirror the JSON body `POST /app
 displayName: "{{ application_name }} ({{ name }})"
 signInAudience: AzureADMyOrg
 web:
-  redirectUris:
-    - "https://{{ environment_code }}.example.com/signin-oidc"
+  redirectUris: "{{ environment.Variables.web_redirectUris }}"
+publicClient:
+  redirectUris: "{{ environment.Variables.publicClient_redirectURIs }}"
+spa:
+  redirectUris: "{{ environment.Variables.spa_redirectURIs }}"
 requiredResourceAccess:
   - resourceAppId: "00000003-0000-0000-c000-000000000000" # Microsoft Graph
     resourceAccess:
@@ -98,6 +101,8 @@ api:
 ```
 
 (`application_name` comes from `AppConfig.yaml`'s application-wide metadata; `name` and `environment_code` from whichever `Environments` entry is being rendered.)
+
+Redirect URIs are defined **per environment**, not once on the App Registration — they can legitimately differ between deployment targets. Each `Environments` entry's own `Variables` map carries three array-valued keys — `web_redirectUris`, `publicClient_redirectURIs`, `spa_redirectURIs` (the mixed `Uris`/`URIs` casing is intentional) — which the template above pulls into the matching Graph `web`/`publicClient`/`spa` blocks. [UC042](UC042_ViewApplicationDetails.md)'s structured editor manages these as three dedicated redirect-URI lists inside each environment card.
 
 `requiredResourceAccess` is what this application *requests* from other resources; `api.oauth2PermissionScopes` is the reverse — delegated permission scopes this application itself *exposes* for other applications to request. Each entry mirrors Graph's `permissionScope` type exactly, one entry per scope. `id` is a GUID Graph uses to match a scope across updates — [UC042](UC042_ViewApplicationDetails.md)'s editor generates one automatically, or (as above) writes it as `{{ environment.Variables.<key> }}` so the real value lives per environment in `AppConfig.yaml` instead of being fixed once at authoring time (see that file's `Environments` bullet above).
 

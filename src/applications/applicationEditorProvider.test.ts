@@ -36,7 +36,6 @@ function validInput(overrides: Partial<ApplicationFormInput> = {}): ApplicationF
     application: {
       displayName: 'Sample Web App',
       signInAudience: 'AzureADMyOrg',
-      redirectUris: [],
       requiredPermissions: [],
       oauth2PermissionScopes: [],
     },

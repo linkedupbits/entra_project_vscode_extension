@@ -1,6 +1,10 @@
 import * as vscode from 'vscode';
 import { ApplicationStore } from '../applications/applicationStore';
-import { ApplicationFiles, ServicePrincipalFields } from '../applications/types';
+import {
+  ApplicationFiles,
+  ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS,
+  ServicePrincipalFields,
+} from '../applications/types';
 import { reservedTagPrefixFor } from '../applications/applicationFormLogic';
 import { getApplicationsRootUri } from '../workspacePaths';
 import { Connection } from './types';
@@ -47,7 +51,9 @@ function stripGeneratedTags(tags: readonly string[], appName: string): string[] 
  *   `identity.environment` is absent (UC035 A4's fallback wizard never collects one). When adding
  *   one, `publisherDomain`/`tenancy_type` are filled in from `connection`/the fetched application
  *   only if the Service Principal also carries a separate `Environment:` tag (see UC035 A5) —
- *   otherwise left blank, the previous behavior.
+ *   otherwise left blank, the previous behavior. The tenant application's redirect URIs are seeded
+ *   into the new entry's `Variables` (as `web_redirectUris` / `publicClient_redirectURIs` /
+ *   `spa_redirectURIs` arrays — UC042 models redirect URIs per environment), each omitted if empty.
  * - Each of the three `.yaml.j2` template files is written only if it doesn't already exist
  *   (`ApplicationStore.existingTemplateFiles()`); one already present is never touched. The
  *   Service Principal's tags are filtered (`stripGeneratedTags()`) before being written, so the
@@ -82,6 +88,16 @@ export async function downloadApplicationToProject(
   const hasEnvironment =
     !environment || existing.appConfig.Environments.some((e) => e.environment_code === environment);
   const enrichFromConnection = hasEnvironmentTag(data.servicePrincipal.value.tags);
+  const newEnvironmentVariables: Record<string, string | string[]> = {};
+  if (data.webRedirectUris.length > 0) {
+    newEnvironmentVariables[ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS.web] = data.webRedirectUris;
+  }
+  if (data.publicClientRedirectUris.length > 0) {
+    newEnvironmentVariables[ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS.publicClient] = data.publicClientRedirectUris;
+  }
+  if (data.spaRedirectUris.length > 0) {
+    newEnvironmentVariables[ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS.spa] = data.spaRedirectUris;
+  }
   const environments =
     !environment || hasEnvironment
       ? existing.appConfig.Environments
@@ -92,7 +108,7 @@ export async function downloadApplicationToProject(
             publisherDomain: enrichFromConnection ? data.applicationPublisherDomain : '',
             tenancy_type: enrichFromConnection ? tenancyTypeFor(connection) : '',
             environment_code: environment,
-            Variables: {},
+            Variables: newEnvironmentVariables,
           },
         ];
 

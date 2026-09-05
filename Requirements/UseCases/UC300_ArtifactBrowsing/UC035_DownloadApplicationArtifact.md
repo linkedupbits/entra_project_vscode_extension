@@ -52,7 +52,10 @@ preconditions above are met.
    * If `<Environment>` is known (it isn't, under A4), an entry is appended to `AppConfig.yaml`'s
      `Environments` list for it (as both `name` and `environment_code`) only if no entry with that
      `environment_code` already exists; an existing one is left untouched. See A5 below for how
-     that new entry's `publisherDomain`/`tenancy_type` are populated.
+     that new entry's `publisherDomain`/`tenancy_type` are populated. The previewed application's
+     redirect URIs are seeded into that new entry's `Variables` as array values (`web_redirectUris`
+     / `publicClient_redirectURIs` / `spa_redirectURIs` — the keys UC042 defines for per-environment
+     redirect URIs), each omitted when the tenant application has none of that category.
    * Each of `Application.yaml.j2`, `FederatedCredentials.yaml.j2`, and `ServicePrincipal.yaml.j2`
      is written with the previewed data **only if that file doesn't already exist**. An existing
      file — which may be a hand-authored Nunjucks template with real `{{ }}` placeholders — is

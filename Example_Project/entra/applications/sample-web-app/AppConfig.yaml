@@ -9,12 +9,16 @@ Environments:
     environment_code: dev
     Variables:
       <<: *DefaultVariables
+      web_redirectUris:
+        - https://dev.sample-web-app.example.com/signin-oidc
   - name: Test
     publisherDomain: contoso-test.onmicrosoft.com
     tenancy_type: ciam
     environment_code: test
     Variables:
       <<: *DefaultVariables
+      web_redirectUris:
+        - https://test.sample-web-app.example.com/signin-oidc
 Dependencies:
   SampleAPIApp:
     AppName: sample-api

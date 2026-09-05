@@ -40,6 +40,8 @@ describe('loadApplicationPreview', () => {
       displayName: 'My App',
       signInAudience: 'AzureADMyOrg',
       web: { redirectUris: ['https://a.example.com'] },
+      publicClient: { redirectUris: ['https://native.example.com'] },
+      spa: { redirectUris: ['https://spa.example.com'] },
     });
     vi.mocked(listFederatedIdentityCredentials).mockResolvedValueOnce([
       { name: 'dev-deploy', issuer: 'https://token.actions.githubusercontent.com', subject: 'repo:x', audiences: ['api://AzureADTokenExchange'], description: '' },
@@ -53,11 +55,13 @@ describe('loadApplicationPreview', () => {
       value: {
         displayName: 'My App',
         signInAudience: 'AzureADMyOrg',
-        redirectUris: ['https://a.example.com'],
         requiredPermissions: [],
         oauth2PermissionScopes: [],
       },
     });
+    expect(result.webRedirectUris).toEqual(['https://a.example.com']);
+    expect(result.publicClientRedirectUris).toEqual(['https://native.example.com']);
+    expect(result.spaRedirectUris).toEqual(['https://spa.example.com']);
     expect(result.federatedCredentials).toEqual({
       kind: 'ok',
       value: [
@@ -104,6 +108,9 @@ describe('loadApplicationPreview', () => {
     const result = await loadApplicationPreview(fakeAuth(), connection, application);
 
     expect(result.applicationPublisherDomain).toBe('');
+    expect(result.webRedirectUris).toEqual([]);
+    expect(result.publicClientRedirectUris).toEqual([]);
+    expect(result.spaRedirectUris).toEqual([]);
   });
 
   it('normalizes a missing service principal (undefined) to empty defaults rather than erroring', async () => {

@@ -3,6 +3,7 @@ import {
   ApplicationFields,
   ApplicationFiles,
   DependencyEntry,
+  ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS,
   EnvironmentEntry,
   FederatedCredentialEntry,
   Oauth2PermissionScopeEntry,
@@ -27,9 +28,17 @@ export interface EnvironmentRowInput {
    * This environment's *own* Variables rows (its `overridesOnly()` subset — see
    * EnvironmentEntry.Variables' doc comment), edited as key/value rows in its card the same way the
    * top-level shared Variables are; `resolveApplicationSubmit` merges the shared defaults back on
-   * top of these to rebuild the full effective set.
+   * top of these to rebuild the full effective set. The three redirect-URI lists below are stored
+   * as array-valued entries in the same map (under `ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS`) but
+   * are edited through their own dedicated lists, not these generic key/value rows.
    */
   variables: VariableRowInput[];
+  /** This environment's `web.redirectUris` — see UC042; stored as `Variables.web_redirectUris`. */
+  webRedirectUris: string[];
+  /** This environment's `publicClient.redirectUris` — stored as `Variables.publicClient_redirectURIs`. */
+  publicClientRedirectUris: string[];
+  /** This environment's `spa.redirectUris` — stored as `Variables.spa_redirectURIs`. */
+  spaRedirectUris: string[];
 }
 
 /** `appName` is picked from the project's existing application folders, not free text — see ApplicationEditorProvider. */
@@ -65,7 +74,6 @@ export interface Oauth2PermissionScopeRowInput {
 export interface ApplicationFieldsInput {
   displayName: string;
   signInAudience: string;
-  redirectUris: string[];
   requiredPermissions: RequiredPermissionRowInput[];
   oauth2PermissionScopes: Oauth2PermissionScopeRowInput[];
 }
@@ -169,8 +177,6 @@ function resolveVariableRows(rows: readonly VariableRowInput[]): VariableRowsRes
 }
 
 function resolveApplication(input: ApplicationFieldsInput): ApplicationFields {
-  const redirectUris = input.redirectUris.map((uri) => uri.trim()).filter((uri) => uri.length > 0);
-
   const requiredPermissions: RequiredPermission[] = [];
   for (const row of input.requiredPermissions) {
     const resourceAppId = row.resourceAppId.trim();
@@ -184,10 +190,14 @@ function resolveApplication(input: ApplicationFieldsInput): ApplicationFields {
   return {
     displayName: input.displayName.trim(),
     signInAudience: coerceSignInAudience(input.signInAudience),
-    redirectUris,
     requiredPermissions,
     oauth2PermissionScopes: resolveOauth2PermissionScopes(input.oauth2PermissionScopes),
   };
+}
+
+/** Trims a redirect-URI list and drops blank entries — same cleanup the flat list used to get. */
+function cleanRedirectUris(uris: readonly string[]): string[] {
+  return uris.map((uri) => uri.trim()).filter((uri) => uri.length > 0);
 }
 
 /**
@@ -264,7 +274,10 @@ function resolveServicePrincipal(input: ServicePrincipalFieldsInput): ServicePri
  * dropped, not an error) — for both the top-level shared Variables and each environment's own
  * Variables list; Environment names must be present and unique; Dependency rows must have
  * both a reference key and a selected application, and reference keys must be unique (same
- * blank-row-as-spacer rule as Variables); a custom Tag must not start with a reserved prefix
+ * blank-row-as-spacer rule as Variables); an environment's three redirect-URI lists are trimmed,
+ * blank-filtered, and folded into its own Variables map (as array values — see
+ * `ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS`) with no further validation; a custom Tag must not start
+ * with a reserved prefix
  * (`AppName:`, `Environment:`, `BusinessUnit:`) reserved for the Generated tags preview, so a
  * custom tag can never collide with or shadow one applied automatically at deploy time. Everything
  * else (the Application/FederatedCredentials/ServicePrincipal sections) is structural cleanup —
@@ -292,13 +305,19 @@ export function resolveApplicationSubmit(input: ApplicationFormInput): Applicati
   for (let index = 0; index < input.environments.length; index++) {
     const row = input.environments[index];
     const name = row.name.trim();
+    const webRedirectUris = cleanRedirectUris(row.webRedirectUris);
+    const publicClientRedirectUris = cleanRedirectUris(row.publicClientRedirectUris);
+    const spaRedirectUris = cleanRedirectUris(row.spaRedirectUris);
     const hasVariableContent = row.variables.some((v) => v.key.trim() !== '' || v.value.trim() !== '');
+    const hasRedirectContent =
+      webRedirectUris.length > 0 || publicClientRedirectUris.length > 0 || spaRedirectUris.length > 0;
     const isBlankRow =
       !name &&
       !row.publisherDomain.trim() &&
       !row.tenancy_type.trim() &&
       !row.environment_code.trim() &&
-      !hasVariableContent;
+      !hasVariableContent &&
+      !hasRedirectContent;
     if (isBlankRow) {
       continue;
     }
@@ -316,12 +335,25 @@ export function resolveApplicationSubmit(input: ApplicationFormInput): Applicati
     if (envVariables.kind === 'duplicateKey') {
       return { kind: 'duplicateEnvironmentVariableKey', environment: name, key: envVariables.key };
     }
+    // The redirect-URI lists are stored as array-valued Variables entries alongside the generic
+    // key/value ones — added last so they win over any generic row a user manually keyed to one of
+    // the reserved redirect keys.
+    const variables: Record<string, string | string[]> = { ...envVariables.variables };
+    if (webRedirectUris.length > 0) {
+      variables[ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS.web] = webRedirectUris;
+    }
+    if (publicClientRedirectUris.length > 0) {
+      variables[ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS.publicClient] = publicClientRedirectUris;
+    }
+    if (spaRedirectUris.length > 0) {
+      variables[ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS.spa] = spaRedirectUris;
+    }
     environments.push({
       name,
       publisherDomain: row.publisherDomain.trim(),
       tenancy_type: row.tenancy_type.trim(),
       environment_code: row.environment_code.trim(),
-      Variables: envVariables.variables,
+      Variables: variables,
     });
   }
   mergeDefaultVariablesIntoEnvironments(variables, environments);

@@ -129,8 +129,12 @@ export function buildApplicationPreviewHtml(data: ApplicationPreviewData): strin
     <div class="value">${escapeHtml(data.application.value.displayName || '(none)')}</div>
     <label>Sign-in audience</label>
     <div class="value">${escapeHtml(data.application.value.signInAudience)}</div>
-    <h3>Redirect URIs</h3>
-    ${listOrNone(data.application.value.redirectUris)}
+    <h3>Web redirect URIs</h3>
+    ${listOrNone(data.webRedirectUris)}
+    <h3>Public client redirect URIs</h3>
+    ${listOrNone(data.publicClientRedirectUris)}
+    <h3>SPA redirect URIs</h3>
+    ${listOrNone(data.spaRedirectUris)}
     <h3>Required permissions</h3>
     ${permissionsListOrNone(data.application.value.requiredPermissions, data.resourceApplications)}
     <h3>Exposed API scopes</h3>

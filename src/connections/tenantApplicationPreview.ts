@@ -32,6 +32,17 @@ export interface ApplicationPreviewData {
    */
   applicationPublisherDomain: string;
   /**
+   * The application's redirect URIs, read straight off the raw Graph fetch — `web.redirectUris`,
+   * `publicClient.redirectUris`, `spa.redirectUris` respectively. Not modelled by `ApplicationFields`
+   * (UC042 defines redirect URIs per environment, not on the App Registration itself — see
+   * `ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS`), so they're carried here for `applicationPreviewHtml.ts`
+   * to show and `downloadApplicationToProject()` to seed a new Environment entry's Variables from.
+   * All empty if the application section itself failed to load.
+   */
+  webRedirectUris: string[];
+  publicClientRedirectUris: string[];
+  spaRedirectUris: string[];
+  /**
    * Every distinct `resourceAppId` referenced by `application.value.requiredPermissions`,
    * resolved to that resource's display name and permission catalogue — Microsoft Graph from the
    * checked-in `wellKnownPermissions.ts` data, any other resource via a live Graph lookup (see
@@ -50,6 +61,18 @@ function errorMessage(err: unknown): string {
 
 function asString(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+/** Pulls `<key>.redirectUris` off a raw Graph application object (e.g. `web`, `publicClient`, `spa`). */
+function redirectUrisFrom(application: Record<string, unknown>, key: string): string[] {
+  const section = application[key];
+  return section && typeof section === 'object'
+    ? asStringArray((section as Record<string, unknown>).redirectUris)
+    : [];
 }
 
 /**
@@ -125,10 +148,15 @@ export async function loadApplicationPreview(
       ? await resolveResourceApplications(accessToken, connection.cloud, applicationSection.value.requiredPermissions)
       : {};
 
+  const rawApplication: Record<string, unknown> =
+    applicationResult.status === 'fulfilled' ? applicationResult.value : {};
+
   return {
     application: applicationSection,
-    applicationPublisherDomain:
-      applicationResult.status === 'fulfilled' ? asString(applicationResult.value.publisherDomain) : '',
+    applicationPublisherDomain: asString(rawApplication.publisherDomain),
+    webRedirectUris: redirectUrisFrom(rawApplication, 'web'),
+    publicClientRedirectUris: redirectUrisFrom(rawApplication, 'publicClient'),
+    spaRedirectUris: redirectUrisFrom(rawApplication, 'spa'),
     resourceApplications,
     federatedCredentials:
       federatedCredentialsResult.status === 'fulfilled'

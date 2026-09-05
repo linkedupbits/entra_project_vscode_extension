@@ -12,6 +12,12 @@ Environments:
       owner_email: platformteam2@example.com
       MyScopeId: 58bdbfaf-6627-489e-a2fd-74e62a302809
       SecondScope: 48460e95-9910-4173-a8ba-4b0e5ba81101
+      web_redirectUris:
+        - https://dev.something.com
+      publicClient_redirectURIs:
+        - msauth://com.something/265263542653265
+      spa_redirectURIs:
+        - http://localhost:3000
   - name: Producion
     publisherDomain: contoso.onmicrosoft.com
     tenancy_type: workforce

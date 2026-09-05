@@ -2,6 +2,7 @@ import * as crypto from 'crypto';
 import {
   ApplicationFiles,
   AppConfig,
+  ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS,
   RequiredPermission,
   Oauth2PermissionScopeEntry,
   FederatedCredentialEntry,
@@ -59,6 +60,34 @@ function envVariableRowsHtml(variables: Record<string, string>): string {
     .join('');
 }
 
+const REDIRECT_URI_VARIABLE_KEYS: readonly string[] = Object.values(ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS);
+
+function asUriArray(value: string | string[] | undefined): string[] {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  return typeof value === 'string' && value.trim() !== '' ? [value] : [];
+}
+
+/** One environment card's redirect-URI list for a single category — see environmentRowsHtml. */
+function envRedirectListHtml(kind: 'web' | 'publicClient' | 'spa', label: string, uris: readonly string[]): string {
+  const rows = uris
+    .map(
+      (uri) => `
+        <div class="row env-redirect-row">
+          <input type="text" class="env-redirect-value" placeholder="https://example.com/signin-oidc" value="${escapeHtml(uri)}" />
+          <button type="button" class="remove-row-btn" aria-label="Remove">✕</button>
+        </div>`
+    )
+    .join('');
+  return `
+        <div class="env-redirect-subsection">
+          <div class="env-vars-heading">${escapeHtml(label)}</div>
+          <div class="env-redirect-rows" data-redirect-kind="${kind}">${rows}</div>
+          <button type="button" class="add-row-btn add-env-redirect-btn" data-redirect-kind="${kind}">+ Add ${escapeHtml(label.replace(/ redirect URIs$/, ''))} redirect URI</button>
+        </div>`;
+}
+
 /**
  * Each environment renders as a collapsible `<details>` card (collapsed by default when loaded,
  * expanded when newly added — the same treatment as the Exposed API scopes / Federated Credentials
@@ -67,11 +96,22 @@ function envVariableRowsHtml(variables: Record<string, string>): string {
  * file's webview script. The card body carries the four fixed fields plus this environment's *own*
  * Variables — `overridesOnly(env.Variables, appConfig.Variables)`, since the shared defaults are
  * edited once in the top-level Variables section and `EnvironmentEntry.Variables` in memory holds
- * the full merged set (see its doc comment).
+ * the full merged set (see its doc comment). The three redirect-URI lists (Web / Public client /
+ * SPA) are also stored in that same `Variables` map (as array values under
+ * `ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS`) but are edited through their own dedicated lists here,
+ * so they're excluded from the generic key/value list above.
  */
 function environmentRowsHtml(appConfig: AppConfig): string {
   return appConfig.Environments.map((env) => {
-    const ownVariables = overridesOnly(env.Variables, appConfig.Variables);
+    const ownVariables: Record<string, string> = {};
+    for (const [key, value] of Object.entries(overridesOnly(env.Variables, appConfig.Variables))) {
+      if (!REDIRECT_URI_VARIABLE_KEYS.includes(key) && typeof value === 'string') {
+        ownVariables[key] = value;
+      }
+    }
+    const webRedirectUris = asUriArray(env.Variables[ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS.web]);
+    const publicClientRedirectUris = asUriArray(env.Variables[ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS.publicClient]);
+    const spaRedirectUris = asUriArray(env.Variables[ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS.spa]);
     return `
     <details class="environment-card">
       <summary class="environment-summary">
@@ -94,6 +134,13 @@ function environmentRowsHtml(appConfig: AppConfig): string {
         <label>Environment code
           <input type="text" class="env-environment_code" value="${escapeHtml(env.environment_code)}" />
         </label>
+        <div class="env-redirect-group">
+          <div class="env-vars-heading">Redirect URIs</div>
+          <div class="hint">Applied to this environment's App Registration at deploy time. Stored as this environment's <code>web_redirectUris</code> / <code>publicClient_redirectURIs</code> / <code>spa_redirectURIs</code> variables.</div>
+          ${envRedirectListHtml('web', 'Web redirect URIs', webRedirectUris)}
+          ${envRedirectListHtml('publicClient', 'Public client redirect URIs', publicClientRedirectUris)}
+          ${envRedirectListHtml('spa', 'SPA redirect URIs', spaRedirectUris)}
+        </div>
         <div class="env-vars-subsection">
           <div class="env-vars-heading">Variables owned by this environment</div>
           <div class="hint">The shared Variables from the section above apply to every environment already — only add here what's specific to this one.</div>
@@ -508,12 +555,14 @@ export function getHtml(
   details[open] > .fedcred-summary::before, details[open] > .environment-summary::before {
     transform: rotate(90deg);
   }
-  .env-vars-subsection { grid-column: 1 / -1; margin-top: 4px; }
-  .env-vars-subsection > .env-vars-heading {
+  .env-vars-subsection, .env-redirect-group { grid-column: 1 / -1; margin-top: 4px; }
+  .env-vars-subsection > .env-vars-heading, .env-redirect-group > .env-vars-heading {
     font-weight: 600;
     font-size: 0.85em;
     margin-bottom: 4px;
   }
+  .env-redirect-subsection { margin: 4px 0 8px; padding-left: 10px; border-left: 2px solid var(--vscode-widget-border, var(--vscode-panel-border)); }
+  .env-redirect-subsection > .env-vars-heading { font-size: 0.85em; margin-bottom: 4px; color: var(--vscode-descriptionForeground); }
   .perm-resourceAppId-wrap, .perm-id-cell { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; }
   .warning-icon {
     flex: 0 0 auto;
@@ -617,9 +666,7 @@ export function getHtml(
       <option value="PersonalMicrosoftAccount" ${selectedAttr(application.signInAudience, 'PersonalMicrosoftAccount')}>Personal Microsoft accounts only</option>
     </select>
 
-    <h3>Redirect URIs</h3>
-    <div id="redirectUriRows">${stringListRowsHtml(application.redirectUris, 'redirecturi', 'https://example.com/signin-oidc')}</div>
-    <button type="button" class="add-row-btn" id="addRedirectUriBtn">+ Add redirect URI</button>
+    <div class="hint">Redirect URIs are defined per environment (in the Environments section above), not here — they can differ per deployment target.</div>
 
     <h3>Required permissions</h3>
     <div class="hint">One row per permission — rows sharing a Resource App ID are grouped together when saved. Resource App ID is either Microsoft Graph or one of this application's Dependencies (added above); a value that's neither (e.g. from a hand-edited file, or referencing a dependency since renamed or removed) is shown as plain text with a ⚠ warning instead.</div>
@@ -685,7 +732,6 @@ export function getHtml(
     // A snapshot as of when this tab was last (re)rendered — see permissionIdOptions.ts for why a
     // dependency added in this same editing session won't have options here until reopened/reverted.
     const PERMISSION_OPTIONS_BY_RESOURCE_APP_ID = ${permissionOptionsByResourceAppIdJson};
-    const redirectUriRows = document.getElementById('redirectUriRows');
     const permissionRows = document.getElementById('permissionRows');
     const oauth2ScopeRows = document.getElementById('oauth2ScopeRows');
     const fedcredRows = document.getElementById('fedcredRows');
@@ -766,6 +812,19 @@ export function getHtml(
           '<option value="workforce">Workforce</option><option value="ciam">CIAM</option>' +
           '</select></label>' +
           '<label>Environment code<input type="text" class="env-environment_code" /></label>' +
+          '<div class="env-redirect-group">' +
+          '<div class="env-vars-heading">Redirect URIs</div>' +
+          '<div class="hint">Applied to this environment\\'s App Registration at deploy time. Stored as this environment\\'s web_redirectUris / publicClient_redirectURIs / spa_redirectURIs variables.</div>' +
+          '<div class="env-redirect-subsection"><div class="env-vars-heading">Web redirect URIs</div>' +
+          '<div class="env-redirect-rows" data-redirect-kind="web"></div>' +
+          '<button type="button" class="add-row-btn add-env-redirect-btn" data-redirect-kind="web">+ Add Web redirect URI</button></div>' +
+          '<div class="env-redirect-subsection"><div class="env-vars-heading">Public client redirect URIs</div>' +
+          '<div class="env-redirect-rows" data-redirect-kind="publicClient"></div>' +
+          '<button type="button" class="add-row-btn add-env-redirect-btn" data-redirect-kind="publicClient">+ Add Public client redirect URI</button></div>' +
+          '<div class="env-redirect-subsection"><div class="env-vars-heading">SPA redirect URIs</div>' +
+          '<div class="env-redirect-rows" data-redirect-kind="spa"></div>' +
+          '<button type="button" class="add-row-btn add-env-redirect-btn" data-redirect-kind="spa">+ Add SPA redirect URI</button></div>' +
+          '</div>' +
           '<div class="env-vars-subsection">' +
           '<div class="env-vars-heading">Variables owned by this environment</div>' +
           '<div class="hint">The shared Variables from the section above apply to every environment already — only add here what\\'s specific to this one.</div>' +
@@ -807,11 +866,11 @@ export function getHtml(
       );
     }
 
-    function addRedirectUriRow() {
+    function addEnvRedirectRow(container) {
       appendRow(
-        redirectUriRows,
-        'row redirecturi-row',
-        '<input type="text" class="redirecturi-value" placeholder="https://example.com/signin-oidc" />' +
+        container,
+        'row env-redirect-row',
+        '<input type="text" class="env-redirect-value" placeholder="https://example.com/signin-oidc" />' +
           '<button type="button" class="remove-row-btn" aria-label="Remove">✕</button>'
       );
     }
@@ -1092,15 +1151,17 @@ export function getHtml(
     });
     document.getElementById('addVariableBtn').addEventListener('click', addVariableRow);
     document.getElementById('addEnvironmentBtn').addEventListener('click', addEnvironmentRow);
-    // Per-environment "+ Add variable" buttons appear N times and can be added dynamically, so
-    // they're handled by delegation rather than wired individually like the section-level ones.
+    // Per-environment "+ Add variable" and the three "+ Add ... redirect URI" buttons appear N
+    // times and can be added dynamically, so they're handled by delegation rather than wired
+    // individually like the section-level ones.
     form.addEventListener('click', function (e) {
       if (e.target.classList.contains('add-env-var-btn')) {
         addEnvVariableRow(e.target.closest('.environment-card').querySelector('.env-var-rows'));
+      } else if (e.target.classList.contains('add-env-redirect-btn')) {
+        addEnvRedirectRow(e.target.closest('.env-redirect-subsection').querySelector('.env-redirect-rows'));
       }
     });
     document.getElementById('addDependencyBtn').addEventListener('click', addDependencyRow);
-    document.getElementById('addRedirectUriBtn').addEventListener('click', addRedirectUriRow);
     document.getElementById('addPermissionBtn').addEventListener('click', addPermissionRow);
     document.getElementById('addOauth2ScopeBtn').addEventListener('click', addOauth2ScopeRow);
     document.getElementById('addFedCredBtn').addEventListener('click', addFedCredRow);
@@ -1138,12 +1199,23 @@ export function getHtml(
             value: r.querySelector('.env-var-value').value,
           };
         });
+        function collectEnvRedirects(kind) {
+          const container = card.querySelector('.env-redirect-rows[data-redirect-kind="' + kind + '"]');
+          return container
+            ? Array.from(container.querySelectorAll('.env-redirect-value')).map(function (i) {
+                return i.value;
+              })
+            : [];
+        }
         return {
           name: card.querySelector('.env-name').value,
           publisherDomain: card.querySelector('.env-publisherDomain').value,
           tenancy_type: card.querySelector('.env-tenancy_type').value,
           environment_code: card.querySelector('.env-environment_code').value,
           variables: variables,
+          webRedirectUris: collectEnvRedirects('web'),
+          publicClientRedirectUris: collectEnvRedirects('publicClient'),
+          spaRedirectUris: collectEnvRedirects('spa'),
         };
       });
       const dependencies = Array.from(document.querySelectorAll('.dependency-row')).map(function (row) {
@@ -1191,7 +1263,6 @@ export function getHtml(
         application: {
           displayName: document.getElementById('displayName').value,
           signInAudience: document.getElementById('signInAudience').value,
-          redirectUris: collectStringList(redirectUriRows, 'redirecturi-value'),
           requiredPermissions: requiredPermissions,
           oauth2PermissionScopes: oauth2PermissionScopes,
         },

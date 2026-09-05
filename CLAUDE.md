@@ -201,7 +201,7 @@ These came out of an explicit planning pass with the user and should not be sile
   an earlier version of this form that kept the three `.yaml.j2` templates as opaque textareas
   specifically to avoid losing comments/Nunjucks syntax on save; the user explicitly overrode that
   caution and accepted the tradeoff below. `Application.yaml.j2` is a **Display name** field, a
-  **Sign-in audience** `<select>` (the four real Graph values), a dynamic **Redirect URIs** list,
+  **Sign-in audience** `<select>` (the four real Graph values),
   and a dynamic **Required permissions** list — Graph's nested
   `requiredResourceAccess[].resourceAccess[]` shape is flattened to one flat `RequiredPermission`
   row (`resourceAppId`/`id`/`type`) per individual permission for editing (`normalizeApplicationFields()`
@@ -302,8 +302,25 @@ These came out of an explicit planning pass with the user and should not be sile
   `ensureOauth2ScopeIdVariablesInEnvironments()` to guarantee that variable name is a key in *every*
   environment's own `Variables` map (see `EnvironmentEntry.Variables` below), generating a fresh GUID
   for any environment that doesn't already have one — never overwriting one that does.
-  `EnvironmentEntry` (`types.ts`) grew a `Variables: Record<string, string>` field for exactly this —
-  each environment's own values, distinct from `AppConfig.yaml`'s shared top-level `Variables`. The
+  `EnvironmentEntry` (`types.ts`) grew a `Variables: Record<string, string | string[]>` field for
+  exactly this — each environment's own values, distinct from `AppConfig.yaml`'s shared top-level
+  `Variables` (which stay `Record<string, string>`). The value type is a `string | string[]` union
+  because **redirect URIs are modelled per environment, not on the App Registration** (an explicit
+  user decision — they legitimately differ per deployment target): each environment card has three
+  dynamic redirect-URI lists (Web / Public client / SPA), stored as *array*-valued entries in that
+  environment's own `Variables` under the keys `web_redirectUris` / `publicClient_redirectURIs` /
+  `spa_redirectURIs` (the inconsistent `Uris`/`URIs` casing is deliberate — `ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS`
+  in `types.ts` is the single source of truth for them). `Application.yaml.j2` carries **no** redirect
+  URIs of its own now — `ApplicationFields.redirectUris` was removed entirely, along with the
+  App-Registration-section "Redirect URIs" list, `serializeApplication`'s `web` block, and
+  `normalizeApplicationFields`'s read of it. UC034's tenant preview still needs redirect URIs, so it
+  reads the raw `web`/`publicClient`/`spa.redirectUris` off the Graph fetch into three side fields on
+  `ApplicationPreviewData` (`webRedirectUris` etc. — the same "tenant data that doesn't fit
+  `ApplicationFields`" pattern `applicationPublisherDomain` already uses) and shows all three;
+  UC035's download seeds them into the new `Environments` entry's `Variables`. `normalizeAppConfig`
+  reads env Variables through `asEnvironmentVariablesRecord` (accepts string arrays; still skips the
+  `<<` merge-key object); the generic "Variables owned by this environment" list and its
+  `overridesOnly()` feed exclude the three redirect keys (they have their own lists). The
   whole **Environments** section is a collapsible box (collapsed by default, its summary carrying a
   live count), and each environment inside it is *itself* a collapsible `<details>` card with
   labelled fields — the same treatment (and shared CSS/`refresh*Summaries()` machinery, plus the
@@ -319,9 +336,12 @@ These came out of an explicit planning pass with the user and should not be sile
   `resolveApplicationSubmit` runs it (and the top-level list) through one shared `resolveVariableRows()`
   helper — a blank row is a spacer, a keyless value or a duplicate key blocks the save with a
   `missing`/`duplicateEnvironmentVariableKey` (naming the environment) or the plain
-  `missing`/`duplicateVariableKey`. Per-environment `+ Add variable` buttons have no fixed id (N of
-  them, addable at runtime) so they're handled by one delegated `form` click listener rather than
-  wired individually. `resolveApplicationSubmit()`'s `mergeDefaultVariablesIntoEnvironments()` then
+  `missing`/`duplicateVariableKey`. `resolveApplicationSubmit` also folds each environment row's
+  three redirect-URI arrays (trimmed, blank-filtered) into its `Variables` under the three redirect
+  keys, omitting an empty one; a row that's blank apart from a redirect URI still blocks save with
+  `missingEnvironmentName` rather than being dropped as a spacer. Per-environment `+ Add variable`
+  and the three `+ Add … redirect URI` buttons have no fixed id (N of them, addable at runtime) so
+  they're handled by one delegated `form` click listener rather than wired individually. `resolveApplicationSubmit()`'s `mergeDefaultVariablesIntoEnvironments()` then
   copies the shared top-level `Variables` into every environment's own map (environment-specific
   values win on a key clash) before the id-variable-name pass runs, so `EnvironmentEntry.Variables`
   in memory always holds each environment's *full effective* set — this mirrors, and is meant to
@@ -433,7 +453,11 @@ These came out of an explicit planning pass with the user and should not be sile
   `normalizeFederatedCredentials()`, `normalizeServicePrincipalFields()`) UC042's local editor
   already uses — deliberate reuse, not a parallel implementation, so a tenant application and a
   local one are guaranteed the same field mapping and the same unmodelled-field limitations
-  (`identifierUris`, `appRoles`, etc. — see UC034). A failure in any one of the three calls (a
+  (`identifierUris`, `appRoles`, etc. — see UC034). Redirect URIs are the exception: UC042 no longer
+  models them on `ApplicationFields` (they're per-environment now), so `loadApplicationPreview()`
+  reads the raw `web`/`publicClient`/`spa.redirectUris` straight off the fetch into three
+  `ApplicationPreviewData` side fields and `buildApplicationPreviewHtml()` shows all three lists. A
+  failure in any one of the three calls (a
   rejected `Promise.allSettled` entry) becomes that section's own `{ kind: 'error', message }`
   rather than failing the other two — only a failure acquiring the access token itself (before any
   of the three calls) aborts the whole preview. `connections/applicationPreviewHtml.ts`'s
@@ -491,7 +515,10 @@ These came out of an explicit planning pass with the user and should not be sile
   before this enrichment existed. `publisherDomain` itself comes from the raw application object's
   own Graph `publisherDomain` field, captured by `tenantApplicationPreview.ts` as
   `ApplicationPreviewData.applicationPublisherDomain` since `ApplicationFields`/UC042 don't model
-  it. Requires all three of UC034's sections to have loaded successfully (`kind: 'ok'`) — refuses
+  it. The new entry's `Variables` are seeded with the previewed application's redirect URIs
+  (`web_redirectUris`/`publicClient_redirectURIs`/`spa_redirectURIs` array values, each omitted when
+  empty) from the same `ApplicationPreviewData` side fields. Requires all three of UC034's sections
+  to have loaded successfully (`kind: 'ok'`) — refuses
   to download, rather than writing a misleadingly empty file, if any one failed.
   `tenantApplicationIdentity.ts`, `promptForApplicationName.ts`, and
   `downloadApplicationToProject.ts` are all genuinely unit-tested, not glue.

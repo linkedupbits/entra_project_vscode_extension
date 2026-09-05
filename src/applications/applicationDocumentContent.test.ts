@@ -25,7 +25,6 @@ const sampleFiles: ApplicationFiles = {
   application: {
     displayName: 'Sample Web App (Dev)',
     signInAudience: 'AzureADMyOrg',
-    redirectUris: ['https://dev.example.com/signin-oidc'],
     requiredPermissions: [
       { resourceAppId: '00000003-0000-0000-c000-000000000000', id: 'e1fe6dd8-ba31-4d61-89e7-88639da4683d', type: 'Scope' },
     ],
@@ -75,7 +74,6 @@ describe('buildApplicationDocumentText', () => {
     expect(parsed.Application).toEqual({
       displayName: 'Sample Web App (Dev)',
       signInAudience: 'AzureADMyOrg',
-      web: { redirectUris: ['https://dev.example.com/signin-oidc'] },
       requiredResourceAccess: [
         {
           resourceAppId: '00000003-0000-0000-c000-000000000000',

@@ -31,14 +31,17 @@ const populatedFiles: ApplicationFiles = {
         publisherDomain: 'contoso.example.com',
         tenancy_type: 'ciam',
         environment_code: 'dev',
-        Variables: { owner_email: 'team@example.com', MyScopeId: '11111111-1111-1111-1111-111111111111' },
+        Variables: {
+          owner_email: 'team@example.com',
+          MyScopeId: '11111111-1111-1111-1111-111111111111',
+          web_redirectUris: ['https://dev.example.com/signin-oidc'],
+        },
       },
     ],
     Dependencies: { Dep1: { AppName: 'other-app' } },
   },
   application: {
     ...emptyApplicationFields(),
-    redirectUris: ['https://example.com/signin-oidc'],
     requiredPermissions: [
       { resourceAppId: '00000003-0000-0000-c000-000000000000', id: 'e1fe6dd8-ba31-4d61-89e7-88639da4683d', type: 'Scope' },
       { resourceAppId: 'raw-unrecognised-guid', id: 'whatever', type: 'Role' },
@@ -182,7 +185,6 @@ const ADD_BUTTON_IDS = [
   'addFedCredBtn',
   'addOauth2ScopeBtn',
   'addPermissionBtn',
-  'addRedirectUriBtn',
   'addTagBtn',
   'addVariableBtn',
 ].sort();
@@ -193,7 +195,6 @@ const ADD_BUTTON_EXPECTATIONS: Record<string, { container: string; requiredClass
   addVariableBtn: { container: 'variableRows', requiredClass: 'variable-row' },
   addEnvironmentBtn: { container: 'environmentRows', requiredClass: 'environment-card' },
   addDependencyBtn: { container: 'dependencyRows', requiredClass: 'dependency-row' },
-  addRedirectUriBtn: { container: 'redirectUriRows', requiredClass: 'redirecturi-row' },
   addPermissionBtn: { container: 'permissionRows', requiredClass: 'permission-row' },
   addOauth2ScopeBtn: { container: 'oauth2ScopeRows', requiredClass: 'oauth2-scope-card' },
   addFedCredBtn: { container: 'fedcredRows', requiredClass: 'fedcred-card' },
@@ -279,5 +280,20 @@ describe('getHtml — generated webview script', () => {
     const envCardHtml = html.slice(envCardStart, envCardEnd);
     expect(envCardHtml).toContain('value="MyScopeId"');
     expect(envCardHtml).not.toContain('value="owner_email"');
+    // the redirect-URI keys are edited through their own lists, never the generic key/value rows
+    expect(envCardHtml).not.toContain('value="web_redirectUris"');
+  });
+
+  it('renders the three per-environment redirect-URI lists, seeded from the environment Variables', () => {
+    const html = getHtml('sample', populatedFiles, ['other-app'], permissionOptions);
+    const envCardStart = html.indexOf('<details class="environment-card">');
+    const envCardHtml = html.slice(envCardStart, html.indexOf('</details>', envCardStart));
+    expect(envCardHtml).toContain('data-redirect-kind="web"');
+    expect(envCardHtml).toContain('data-redirect-kind="publicClient"');
+    expect(envCardHtml).toContain('data-redirect-kind="spa"');
+    expect(envCardHtml).toContain('value="https://dev.example.com/signin-oidc"');
+    // the flat App Registration Redirect URIs list is gone
+    expect(html).not.toContain('id="redirectUriRows"');
+    expect(html).not.toContain('id="addRedirectUriBtn"');
   });
 });

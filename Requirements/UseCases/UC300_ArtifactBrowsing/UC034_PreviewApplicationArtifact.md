@@ -53,14 +53,18 @@ environments, or dependencies to show).
    [UC042](../UC400_ApplicationManagement/UC042_ViewApplicationDetails.md)'s structured editor
    uses to read `Application.yaml.j2`, `FederatedCredentials.yaml.j2`, and
    `ServicePrincipal.yaml.j2` from disk — so identical field mapping (and the same unmodelled-field
-   limitations) applies to both a tenant application and a local one.
+   limitations) applies to both a tenant application and a local one. The application's redirect
+   URIs are the one exception: UC042 models those per environment, not on the App Registration, so
+   the preview reads the tenant application's `web.redirectUris` / `publicClient.redirectUris` /
+   `spa.redirectUris` straight off the raw Graph fetch and shows all three as separate lists.
 4. The extension shows a **Unique name** line, then the three normalized sections —
    **Application (App Registration)**, **Federated Credentials**, **Service Principal** — in a
    read-only webview panel (`ArtifactViewerPanel`), titled with the application's display name (or
    its application ID if display name is blank) and badged "Connection: `<connection name>`". Each
    section shows its fields as plain read-only text/lists (not inputs), including an explicit
-   "None" for an empty list (no redirect URIs, no required permissions, no federated credentials,
-   no tags) — never a silently blank section indistinguishable from one that failed to load.
+   "None" for an empty list (each of the three redirect-URI categories, no required permissions, no
+   federated credentials, no tags) — never a silently blank section indistinguishable from one that
+   failed to load.
    * **Unique name** is the `AppName:<Environment>_<BusinessUnit>_<AppName>` tag on the Service
      Principal (see UC042's Generated tags preview), shown as `<Environment>_<BusinessUnit>_<AppName>`
      — the one identifier guaranteed unique across applications that happen to share a Graph

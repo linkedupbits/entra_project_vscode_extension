@@ -98,11 +98,25 @@ describe('normalizeAppConfig', () => {
     expect(result.Environments[0].Variables).toEqual({});
   });
 
-  it('skips an object/array-valued environment Variables entry rather than coercing it to "[object Object]"', () => {
+  it('skips an object-valued (merge-key) environment Variables entry rather than coercing it to "[object Object]"', () => {
     const result = normalizeAppConfig({
       Environments: [{ name: 'Dev', Variables: { '<<': { owner_email: 'team@example.com' }, safe: 'kept' } }],
     });
     expect(result.Environments[0].Variables).toEqual({ safe: 'kept' });
+  });
+
+  it('keeps a string-array environment Variables value (a redirect-URI list), dropping non-string entries', () => {
+    const result = normalizeAppConfig({
+      Environments: [
+        {
+          name: 'Dev',
+          Variables: { web_redirectUris: ['https://a.example.com', 42, 'https://b.example.com'] },
+        },
+      ],
+    });
+    expect(result.Environments[0].Variables).toEqual({
+      web_redirectUris: ['https://a.example.com', 'https://b.example.com'],
+    });
   });
 
   it('ignores a non-object Dependencies value', () => {
@@ -156,6 +170,34 @@ describe('buildAppConfigNode', () => {
     expect(parsed.Environments[0].Variables).toEqual({ owner_email: 'team@example.com', MyScopeId: 'abc' });
   });
 
+  it("writes an environment's array-valued redirect-URI Variables and round-trips them", () => {
+    const appConfig: AppConfig = {
+      ...emptyAppConfig(),
+      Variables: { owner_email: 'team@example.com' },
+      Environments: [
+        {
+          name: 'Dev',
+          publisherDomain: '',
+          tenancy_type: 'ciam',
+          environment_code: 'dev',
+          Variables: {
+            owner_email: 'team@example.com',
+            web_redirectUris: ['https://dev.example.com/signin-oidc'],
+            spa_redirectURIs: ['https://dev.example.com'],
+          },
+        },
+      ],
+    };
+
+    const parsed = YAML.parse(stringify(appConfig), { merge: true });
+
+    expect(parsed.Environments[0].Variables).toEqual({
+      owner_email: 'team@example.com',
+      web_redirectUris: ['https://dev.example.com/signin-oidc'],
+      spa_redirectURIs: ['https://dev.example.com'],
+    });
+  });
+
   it('lets an environment override a shared default with its own different value', () => {
     const appConfig: AppConfig = {
       ...emptyAppConfig(),
@@ -197,7 +239,6 @@ describe('emptyApplicationFields', () => {
     expect(emptyApplicationFields()).toEqual({
       displayName: '',
       signInAudience: 'AzureADMyOrg',
-      redirectUris: [],
       requiredPermissions: [],
       oauth2PermissionScopes: [],
     });
@@ -213,11 +254,10 @@ describe('normalizeApplicationFields', () => {
     expect(normalizeApplicationFields(value)).toEqual(emptyApplicationFields());
   });
 
-  it('reads displayName, a valid signInAudience, web.redirectUris, and flattens requiredResourceAccess', () => {
+  it('reads displayName, a valid signInAudience, and flattens requiredResourceAccess', () => {
     const result = normalizeApplicationFields({
       displayName: 'Sample Web App',
       signInAudience: 'AzureADMultipleOrgs',
-      web: { redirectUris: ['https://a.example.com', 'https://b.example.com'] },
       requiredResourceAccess: [
         { resourceAppId: 'graph', resourceAccess: [{ id: 'perm-a', type: 'Scope' }, { id: 'perm-b', type: 'Role' }] },
         { resourceAppId: 'other-api', resourceAccess: [{ id: 'perm-c', type: 'Scope' }] },
@@ -226,7 +266,6 @@ describe('normalizeApplicationFields', () => {
     expect(result).toEqual({
       displayName: 'Sample Web App',
       signInAudience: 'AzureADMultipleOrgs',
-      redirectUris: ['https://a.example.com', 'https://b.example.com'],
       requiredPermissions: [
         { resourceAppId: 'graph', id: 'perm-a', type: 'Scope' },
         { resourceAppId: 'graph', id: 'perm-b', type: 'Role' },
@@ -239,11 +278,6 @@ describe('normalizeApplicationFields', () => {
   it('defaults an invalid/missing signInAudience to AzureADMyOrg', () => {
     expect(normalizeApplicationFields({ signInAudience: 'NotReal' }).signInAudience).toBe('AzureADMyOrg');
     expect(normalizeApplicationFields({}).signInAudience).toBe('AzureADMyOrg');
-  });
-
-  it('treats a missing/non-object web as no redirect URIs', () => {
-    expect(normalizeApplicationFields({}).redirectUris).toEqual([]);
-    expect(normalizeApplicationFields({ web: 'not an object' }).redirectUris).toEqual([]);
   });
 
   it('ignores a non-array requiredResourceAccess', () => {

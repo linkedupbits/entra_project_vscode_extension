@@ -16,16 +16,33 @@ export interface EnvironmentEntry {
    * where UC042's editor parks an `Exposed API scopes` row's generated `id`, referenced from
    * `Application.yaml.j2` as `{{ environment.Variables.<key> }}` (see `oauth2ScopeIdReference.ts`),
    * so the same logical scope's id can be a fixed real GUID per deployment target without hardcoding
-   * one directly into the template. In memory this always holds the environment's *full effective*
-   * set (shared defaults already merged in — see `resolveApplicationSubmit`'s
-   * `mergeDefaultVariablesIntoEnvironments`); on disk only its `overridesOnly()` subset is written,
-   * alongside a `<<: *DefaultVariables` alias (see `buildAppConfigNode`). UC042's editor exposes
-   * that overrides-only subset as an editable per-environment Variables list;
+   * one directly into the template. It also holds this environment's redirect URIs — three string
+   * *array* values under the keys in `ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS` (`web_redirectUris` /
+   * `publicClient_redirectURIs` / `spa_redirectURIs`), since redirect URIs are defined per
+   * deployment target, not once on the App Registration (UC042). Hence the value type is
+   * `string | string[]`, not just `string`.
+   *
+   * In memory this always holds the environment's *full effective* set (shared defaults already
+   * merged in — see `resolveApplicationSubmit`'s `mergeDefaultVariablesIntoEnvironments`); on disk
+   * only its `overridesOnly()` subset is written, alongside a `<<: *DefaultVariables` alias (see
+   * `buildAppConfigNode`). UC042's editor exposes that overrides-only subset as an editable
+   * per-environment Variables list (redirect URIs get their own three lists in the same card);
    * `ensureOauth2ScopeIdVariablesInEnvironments` guarantees a referenced key exists here, generating
    * a GUID for it if missing, on every save.
    */
-  Variables: Record<string, string>;
+  Variables: Record<string, string | string[]>;
 }
+
+/**
+ * The three `EnvironmentEntry.Variables` keys that hold an environment's redirect URIs as string
+ * arrays — one per Entra redirect-URI category. The casing is deliberately inconsistent
+ * (`Uris` vs `URIs`) to match exactly what was specified for the on-disk format (UC042/UC040).
+ */
+export const ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS = {
+  web: 'web_redirectUris',
+  publicClient: 'publicClient_redirectURIs',
+  spa: 'spa_redirectURIs',
+} as const;
 
 /**
  * One entry in `AppConfig.yaml`'s `Dependencies` map — a reference to another application
@@ -100,7 +117,6 @@ export interface Oauth2PermissionScopeEntry {
 export interface ApplicationFields {
   displayName: string;
   signInAudience: SignInAudience;
-  redirectUris: string[];
   requiredPermissions: RequiredPermission[];
   oauth2PermissionScopes: Oauth2PermissionScopeEntry[];
 }
@@ -138,7 +154,7 @@ export function emptyAppConfig(): AppConfig {
 }
 
 export function emptyApplicationFields(): ApplicationFields {
-  return { displayName: '', signInAudience: 'AzureADMyOrg', redirectUris: [], requiredPermissions: [], oauth2PermissionScopes: [] };
+  return { displayName: '', signInAudience: 'AzureADMyOrg', requiredPermissions: [], oauth2PermissionScopes: [] };
 }
 
 export function emptyServicePrincipalFields(): ServicePrincipalFields {
@@ -170,6 +186,29 @@ function asVariablesRecord(value: unknown): Record<string, string> {
         result[key] = v;
       } else if (typeof v === 'number' || typeof v === 'boolean') {
         result[key] = String(v);
+      }
+    }
+  }
+  return result;
+}
+
+/**
+ * Like `asVariablesRecord`, but for an environment's own `Variables` map (`EnvironmentEntry`),
+ * which additionally holds redirect-URI *arrays* (see `ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS`).
+ * A string-array value is kept (its non-string entries dropped); every other array/object value is
+ * still skipped for the same reason `asVariablesRecord` skips them (an unresolved YAML merge key,
+ * or a value this schema doesn't model).
+ */
+function asEnvironmentVariablesRecord(value: unknown): Record<string, string | string[]> {
+  const result: Record<string, string | string[]> = {};
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+      if (typeof v === 'string') {
+        result[key] = v;
+      } else if (typeof v === 'number' || typeof v === 'boolean') {
+        result[key] = String(v);
+      } else if (Array.isArray(v)) {
+        result[key] = v.filter((item): item is string => typeof item === 'string');
       }
     }
   }
@@ -218,7 +257,7 @@ function normalizeEnvironmentEntry(entry: unknown): EnvironmentEntry {
     publisherDomain: asString(obj.publisherDomain),
     tenancy_type: asString(obj.tenancy_type),
     environment_code: asString(obj.environment_code),
-    Variables: asVariablesRecord(obj.Variables),
+    Variables: asEnvironmentVariablesRecord(obj.Variables),
   };
 }
 
@@ -237,7 +276,6 @@ export function normalizeApplicationFields(parsed: unknown): ApplicationFields {
     return emptyApplicationFields();
   }
   const obj = parsed as Record<string, unknown>;
-  const web = obj.web && typeof obj.web === 'object' ? (obj.web as Record<string, unknown>) : {};
   const api = obj.api && typeof obj.api === 'object' ? (obj.api as Record<string, unknown>) : {};
   const signInAudience = SIGN_IN_AUDIENCES.includes(obj.signInAudience as SignInAudience)
     ? (obj.signInAudience as SignInAudience)
@@ -246,7 +284,6 @@ export function normalizeApplicationFields(parsed: unknown): ApplicationFields {
   return {
     displayName: asString(obj.displayName),
     signInAudience,
-    redirectUris: asStringArray(web.redirectUris),
     requiredPermissions: flattenRequiredResourceAccess(obj.requiredResourceAccess),
     oauth2PermissionScopes: normalizeOauth2PermissionScopes(api.oauth2PermissionScopes),
   };
@@ -317,18 +354,20 @@ export function groupRequiredPermissions(rows: readonly RequiredPermission[]): A
 /**
  * Builds the exact Graph JSON shape for Application.yaml.j2 from the form's flat
  * `requiredPermissions` rows — see RequiredPermission's doc comment above. Empty optional sections
- * (`web`, `requiredResourceAccess`) are omitted entirely rather than written as `{}`/`[]`. Shared
+ * (`requiredResourceAccess`, `api`) are omitted entirely rather than written as `{}`/`[]`. Shared
  * by `ApplicationStore.save()` and `applicationDocumentContent.ts`'s combined virtual document, so
  * both editing surfaces write the identical on-disk shape.
+ *
+ * Redirect URIs are deliberately *not* written here: they're defined per deployment target and
+ * live in each `EnvironmentEntry.Variables` map (see `ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS`), for
+ * `Application.yaml.j2` to reference as `{{ environment.Variables.web_redirectUris }}` etc. at
+ * deploy time — never as a literal `web`/`spa`/`publicClient` block on the App Registration.
  */
 export function serializeApplication(fields: ApplicationFields): Record<string, unknown> {
   const result: Record<string, unknown> = {
     displayName: fields.displayName,
     signInAudience: fields.signInAudience,
   };
-  if (fields.redirectUris.length > 0) {
-    result.web = { redirectUris: fields.redirectUris };
-  }
   const grouped = groupRequiredPermissions(fields.requiredPermissions);
   if (grouped.length > 0) {
     result.requiredResourceAccess = grouped;
@@ -402,9 +441,16 @@ export function buildAppConfigNode(doc: YAML.Document, appConfig: AppConfig): YA
  * in the defaults but with a different value. This is what `buildAppConfigNode` writes to disk
  * alongside the `<<` alias, and what UC042's editor shows as that environment's editable Variables
  * list (the shared defaults are edited once, in the top-level Variables section).
+ *
+ * The shared top-level `Variables` are always plain strings, so an array-valued key (a redirect-URI
+ * list — see `ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS`) can never equal a default and is always kept
+ * as an override, which is exactly right — redirect URIs are per-environment by definition.
  */
-export function overridesOnly(variables: Record<string, string>, defaults: Record<string, string>): Record<string, string> {
-  const result: Record<string, string> = {};
+export function overridesOnly(
+  variables: Record<string, string | string[]>,
+  defaults: Record<string, string>
+): Record<string, string | string[]> {
+  const result: Record<string, string | string[]> = {};
   for (const [key, value] of Object.entries(variables)) {
     if (defaults[key] !== value) {
       result[key] = value;

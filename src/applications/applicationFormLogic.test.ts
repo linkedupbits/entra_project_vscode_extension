@@ -8,6 +8,9 @@ function env(overrides: Partial<ApplicationFormInput['environments'][number]> = 
     tenancy_type: 'ciam',
     environment_code: 'dev',
     variables: [],
+    webRedirectUris: [],
+    publicClientRedirectUris: [],
+    spaRedirectUris: [],
     ...overrides,
   };
 }
@@ -22,7 +25,6 @@ function formInput(overrides: Partial<ApplicationFormInput> = {}): ApplicationFo
     application: {
       displayName: '',
       signInAudience: 'AzureADMyOrg',
-      redirectUris: [],
       requiredPermissions: [],
       oauth2PermissionScopes: [],
     },
@@ -133,7 +135,7 @@ describe('resolveApplicationSubmit', () => {
     it('drops a fully-blank row silently', () => {
       const result = resolveApplicationSubmit(
         formInput({
-          environments: [{ name: '', publisherDomain: '', tenancy_type: '', environment_code: '', variables: [] }],
+          environments: [env({ name: '', publisherDomain: '', tenancy_type: '', environment_code: '', variables: [] })],
         })
       );
       expect(result.kind).toBe('ok');
@@ -146,7 +148,7 @@ describe('resolveApplicationSubmit', () => {
       const result = resolveApplicationSubmit(
         formInput({
           environments: [
-            { name: '', publisherDomain: '', tenancy_type: '', environment_code: '', variables: [{ key: 'k', value: 'v' }] },
+            env({ name: '', publisherDomain: '', tenancy_type: '', environment_code: '', variables: [{ key: 'k', value: 'v' }] }),
           ],
         })
       );
@@ -236,13 +238,12 @@ describe('resolveApplicationSubmit', () => {
   });
 
   describe('application', () => {
-    it('trims displayName and drops blank redirect URI rows', () => {
+    it('trims displayName', () => {
       const result = resolveApplicationSubmit(
         formInput({
           application: {
             displayName: '  Sample Web App  ',
             signInAudience: 'AzureADMyOrg',
-            redirectUris: ['  https://a.example.com/signin-oidc  ', '   ', ''],
             requiredPermissions: [],
             oauth2PermissionScopes: [],
           },
@@ -251,8 +252,50 @@ describe('resolveApplicationSubmit', () => {
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
         expect(result.files.application.displayName).toBe('Sample Web App');
-        expect(result.files.application.redirectUris).toEqual(['https://a.example.com/signin-oidc']);
       }
+    });
+
+    it('folds an environment\'s three redirect-URI lists into its Variables (trimmed, blank-filtered, as arrays)', () => {
+      const result = resolveApplicationSubmit(
+        formInput({
+          environments: [
+            env({
+              name: 'Dev',
+              webRedirectUris: ['  https://a.example.com/signin-oidc  ', '   ', ''],
+              publicClientRedirectUris: ['https://login.microsoftonline.com/common/oauth2/nativeclient'],
+              spaRedirectUris: ['https://spa.example.com'],
+            }),
+          ],
+        })
+      );
+      expect(result.kind).toBe('ok');
+      if (result.kind === 'ok') {
+        expect(result.files.appConfig.Environments[0].Variables).toEqual({
+          web_redirectUris: ['https://a.example.com/signin-oidc'],
+          publicClient_redirectURIs: ['https://login.microsoftonline.com/common/oauth2/nativeclient'],
+          spa_redirectURIs: ['https://spa.example.com'],
+        });
+      }
+    });
+
+    it('does not drop a row that is blank apart from a redirect URI the user typed', () => {
+      const result = resolveApplicationSubmit(
+        formInput({
+          environments: [
+            {
+              name: '',
+              publisherDomain: '',
+              tenancy_type: '',
+              environment_code: '',
+              variables: [],
+              webRedirectUris: ['https://a.example.com/signin-oidc'],
+              publicClientRedirectUris: [],
+              spaRedirectUris: [],
+            },
+          ],
+        })
+      );
+      expect(result).toEqual({ kind: 'missingEnvironmentName', index: 0 });
     });
 
     it('coerces an unrecognised signInAudience to the default', () => {
@@ -261,7 +304,6 @@ describe('resolveApplicationSubmit', () => {
           application: {
             displayName: '',
             signInAudience: 'NotARealValue',
-            redirectUris: [],
             requiredPermissions: [],
             oauth2PermissionScopes: [],
           },
@@ -285,7 +327,6 @@ describe('resolveApplicationSubmit', () => {
             application: {
               displayName: '',
               signInAudience: value,
-              redirectUris: [],
               requiredPermissions: [],
               oauth2PermissionScopes: [],
             },
@@ -304,7 +345,6 @@ describe('resolveApplicationSubmit', () => {
           application: {
             displayName: '',
             signInAudience: 'AzureADMyOrg',
-            redirectUris: [],
             requiredPermissions: [{ resourceAppId: '  ', id: '  ', type: 'Scope' }],
             oauth2PermissionScopes: [],
           },
@@ -322,7 +362,6 @@ describe('resolveApplicationSubmit', () => {
           application: {
             displayName: '',
             signInAudience: 'AzureADMyOrg',
-            redirectUris: [],
             requiredPermissions: [{ resourceAppId: '  00000003-...  ', id: '  abc  ', type: 'NotAType' }],
             oauth2PermissionScopes: [],
           },
@@ -342,7 +381,6 @@ describe('resolveApplicationSubmit', () => {
           application: {
             displayName: '',
             signInAudience: 'AzureADMyOrg',
-            redirectUris: [],
             requiredPermissions: [{ resourceAppId: 'x', id: 'y', type: 'Role' }],
             oauth2PermissionScopes: [],
           },
@@ -362,7 +400,6 @@ describe('resolveApplicationSubmit', () => {
           application: {
             displayName: '',
             signInAudience: 'AzureADMyOrg',
-            redirectUris: [],
             requiredPermissions: [],
             oauth2PermissionScopes: [
               {
@@ -392,7 +429,6 @@ describe('resolveApplicationSubmit', () => {
           application: {
             displayName: '',
             signInAudience: 'AzureADMyOrg',
-            redirectUris: [],
             requiredPermissions: [],
             oauth2PermissionScopes: [
               {
@@ -433,7 +469,6 @@ describe('resolveApplicationSubmit', () => {
           application: {
             displayName: '',
             signInAudience: 'AzureADMyOrg',
-            redirectUris: [],
             requiredPermissions: [],
             oauth2PermissionScopes: [
               {
@@ -463,7 +498,6 @@ describe('resolveApplicationSubmit', () => {
           application: {
             displayName: '',
             signInAudience: 'AzureADMyOrg',
-            redirectUris: [],
             requiredPermissions: [],
             oauth2PermissionScopes: [
               {
@@ -495,7 +529,6 @@ describe('resolveApplicationSubmit', () => {
           application: {
             displayName: '',
             signInAudience: 'AzureADMyOrg',
-            redirectUris: [],
             requiredPermissions: [],
             oauth2PermissionScopes: [
               {
@@ -540,7 +573,6 @@ describe('resolveApplicationSubmit', () => {
           application: {
             displayName: '',
             signInAudience: 'AzureADMyOrg',
-            redirectUris: [],
             requiredPermissions: [],
             oauth2PermissionScopes: [oauth2Scope('MyNewPermissionVariableName')],
           },
@@ -562,7 +594,6 @@ describe('resolveApplicationSubmit', () => {
           application: {
             displayName: '',
             signInAudience: 'AzureADMyOrg',
-            redirectUris: [],
             requiredPermissions: [],
             oauth2PermissionScopes: [oauth2Scope('MyNewPermissionVariableName')],
           },
@@ -581,7 +612,6 @@ describe('resolveApplicationSubmit', () => {
           application: {
             displayName: '',
             signInAudience: 'AzureADMyOrg',
-            redirectUris: [],
             requiredPermissions: [],
             oauth2PermissionScopes: [oauth2Scope('')],
           },
@@ -599,9 +629,7 @@ describe('resolveApplicationSubmit', () => {
       const result = resolveApplicationSubmit(
         formInput({
           variables: [{ key: 'owner_email', value: 'team@example.com' }],
-          environments: [
-            { name: 'Dev', publisherDomain: '', tenancy_type: 'ciam', environment_code: 'dev', variables: [] },
-          ],
+          environments: [env({ name: 'Dev', publisherDomain: '' })],
         })
       );
       expect(result.kind).toBe('ok');
@@ -615,13 +643,7 @@ describe('resolveApplicationSubmit', () => {
         formInput({
           variables: [{ key: 'owner_email', value: 'team@example.com' }],
           environments: [
-            {
-              name: 'Dev',
-              publisherDomain: '',
-              tenancy_type: 'ciam',
-              environment_code: 'dev',
-              variables: [{ key: 'owner_email', value: 'dev-team@example.com' }],
-            },
+            env({ name: 'Dev', publisherDomain: '', variables: [{ key: 'owner_email', value: 'dev-team@example.com' }] }),
           ],
         })
       );

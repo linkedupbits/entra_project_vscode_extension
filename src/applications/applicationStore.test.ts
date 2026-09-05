@@ -29,7 +29,6 @@ const sampleFiles: ApplicationFiles = {
   application: {
     displayName: 'Sample Web App (Dev)',
     signInAudience: 'AzureADMyOrg',
-    redirectUris: ['https://dev.example.com/signin-oidc'],
     requiredPermissions: [
       { resourceAppId: '00000003-0000-0000-c000-000000000000', id: 'e1fe6dd8-ba31-4d61-89e7-88639da4683d', type: 'Scope' },
     ],
@@ -71,7 +70,6 @@ describe('ApplicationStore.load', () => {
     expect(files.application).toEqual({
       displayName: '',
       signInAudience: 'AzureADMyOrg',
-      redirectUris: [],
       requiredPermissions: [],
       oauth2PermissionScopes: [],
     });
@@ -103,7 +101,6 @@ describe('ApplicationStore.load', () => {
           YAML.stringify({
             displayName: sampleFiles.application.displayName,
             signInAudience: sampleFiles.application.signInAudience,
-            web: { redirectUris: sampleFiles.application.redirectUris },
             requiredResourceAccess: [
               {
                 resourceAppId: '00000003-0000-0000-c000-000000000000',
@@ -143,7 +140,6 @@ describe('ApplicationStore.save', () => {
     expect(YAML.parse(writes.get('/repo/entra/applications/sample-web-app/Application.yaml.j2')!)).toEqual({
       displayName: 'Sample Web App (Dev)',
       signInAudience: 'AzureADMyOrg',
-      web: { redirectUris: ['https://dev.example.com/signin-oidc'] },
       requiredResourceAccess: [
         {
           resourceAppId: '00000003-0000-0000-c000-000000000000',
@@ -163,14 +159,13 @@ describe('ApplicationStore.save', () => {
     });
   });
 
-  it('omits web and requiredResourceAccess entirely when there is nothing to put in them', async () => {
+  it('omits requiredResourceAccess and api entirely when there is nothing to put in them', async () => {
     await new ApplicationStore().save(folderUri as never, {
       ...sampleFiles,
       application: {
         displayName: 'Bare',
         signInAudience: 'AzureADMyOrg',
-        redirectUris: [],
-        requiredPermissions: [],
+          requiredPermissions: [],
         oauth2PermissionScopes: [],
       },
     });
@@ -189,8 +184,7 @@ describe('ApplicationStore.save', () => {
       application: {
         displayName: '',
         signInAudience: 'AzureADMyOrg',
-        redirectUris: [],
-        requiredPermissions: [
+          requiredPermissions: [
           { resourceAppId: 'graph', id: 'perm-a', type: 'Scope' },
           { resourceAppId: 'graph', id: 'perm-b', type: 'Role' },
           { resourceAppId: 'other-api', id: 'perm-c', type: 'Scope' },
