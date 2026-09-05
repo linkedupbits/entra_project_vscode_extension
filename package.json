@@ -176,7 +176,8 @@
     "lint": "eslint src",
     "test": "vitest run",
     "test:watch": "vitest",
-    "coverage": "vitest run --coverage"
+    "coverage": "vitest run --coverage",
+    "download:graph-permissions": "node scripts/downloadGraphPermissions.js"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

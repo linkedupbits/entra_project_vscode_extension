@@ -69,6 +69,49 @@ describe('buildApplicationPreviewHtml', () => {
     expect(html).toContain('Scope');
   });
 
+  it('resolves a well-known Microsoft Graph permission to its human-readable name', () => {
+    const html = buildApplicationPreviewHtml(
+      data({
+        application: {
+          kind: 'ok',
+          value: {
+            displayName: 'My App',
+            signInAudience: 'AzureADMyOrg',
+            redirectUris: [],
+            requiredPermissions: [
+              {
+                resourceAppId: '00000003-0000-0000-c000-000000000000',
+                id: '7ab1d382-f21e-4acd-a863-ba3e13f7da61',
+                type: 'Role',
+              },
+            ],
+          },
+        },
+      })
+    );
+    expect(html).toContain('Directory.Read.All');
+    expect(html).toContain('7ab1d382-f21e-4acd-a863-ba3e13f7da61');
+  });
+
+  it('still shows the raw IDs for an unrecognised permission, without a resolved name', () => {
+    const html = buildApplicationPreviewHtml(
+      data({
+        application: {
+          kind: 'ok',
+          value: {
+            displayName: 'My App',
+            signInAudience: 'AzureADMyOrg',
+            redirectUris: [],
+            requiredPermissions: [{ resourceAppId: 'some-other-api', id: 'unknown-id', type: 'Scope' }],
+          },
+        },
+      })
+    );
+    expect(html).toContain('some-other-api');
+    expect(html).toContain('unknown-id');
+    expect(html).not.toContain('<strong>');
+  });
+
   it('renders each federated credential with its fields', () => {
     const html = buildApplicationPreviewHtml(
       data({

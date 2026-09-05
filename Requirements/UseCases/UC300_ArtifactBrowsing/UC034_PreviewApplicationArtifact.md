@@ -62,6 +62,18 @@ environments, or dependencies to show).
      `displayName`, which Graph itself doesn't enforce as unique. Shown as an explicit "No unique
      name tag found" state, not omitted, when the Service Principal has no such tag or its section
      failed to load (see `tenantApplicationIdentity.ts`'s `parseTenantApplicationIdentity()`).
+   * Each required-permission row in the Application section shows the raw `resourceAppId`/`id`
+     pair *and*, when recognised, a resolved human-readable name (e.g. Microsoft Graph's
+     `7ab1d382-f21e-4acd-a863-ba3e13f7da61` shown alongside "Directory.Read.All") — see
+     `graph/wellKnownPermissions.ts`'s `describeRequiredPermission()`. The raw IDs are always shown
+     too, never replaced by the resolved name, so the underlying value stays visible/verifiable.
+     Only Microsoft Graph is covered, via a checked-in, regeneratable lookup table holding its
+     complete permission catalogue (see `scripts/downloadGraphPermissions.js`, which by default
+     fetches this from Microsoft's own public, unauthenticated permissions reference data — no
+     credentials needed, with a `--from-tenant` fallback that queries a live tenant instead) — an
+     unrecognised resourceAppId (any resource other than Microsoft Graph) falls back to showing
+     just the raw IDs, the previous behavior. This resolution is preview-only; UC042's local,
+     editable Required Permissions list does not (yet) do the same.
    * The panel always shows a **Download to project** button — see
      [UC035 — Download an Application Artifact to the Project](UC035_DownloadApplicationArtifact.md).
      When no unique name was found, selecting it prompts for an application name instead of

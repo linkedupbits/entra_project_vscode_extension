@@ -37,7 +37,10 @@ Not all of the above is implemented yet — check before relying on this summary
   (Application / Federated Credentials / Service Principal) mirroring the local editor's layout,
   plus a **Download to project** button (asking for an application name if the tenant's Service
   Principal has no `AppName:` identifying tag) that seeds or updates the matching local
-  application-definition folder rather than writing a flat downloaded-artifact snapshot.
+  application-definition folder rather than writing a flat downloaded-artifact snapshot. Required
+  permissions in that preview resolve recognised Microsoft Graph permission IDs to their
+  human-readable name (e.g. "Directory.Read.All") via a checked-in, regeneratable lookup table —
+  see [Regenerating Graph permission names](#regenerating-graph-permission-names) below.
 - **Not yet implemented**: the other tenant artifact categories (Service Principals, Groups,
   Directory Roles, External ID user flows/custom auth extensions), the flat downloaded-artifact
   snapshot format for any category, comparing a preview with a local file, and actually
@@ -111,6 +114,35 @@ npm run coverage      # vitest run --coverage (enforces the thresholds in vitest
 All four are expected to pass cleanly before a change is considered done — see
 `NonFunctionalRequirements.md`'s coverage requirement for what's excluded and why.
 
+### Regenerating Graph permission names
+
+[`src/graph/wellKnownPermissions/microsoftGraph.json`](src/graph/wellKnownPermissions/microsoftGraph.json)
+backs the human-readable permission names shown in the tenant application preview (e.g. Microsoft
+Graph's `7ab1d382-f21e-4acd-a863-ba3e13f7da61` → "Directory.Read.All"). It's the complete,
+real Microsoft Graph permission catalogue (1131 entries as of writing), generated — not
+hand-typed — by [`scripts/downloadGraphPermissions.js`](scripts/downloadGraphPermissions.js), a
+standalone Node script (not part of the extension bundle):
+
+```bash
+npm run download:graph-permissions
+```
+
+By default this needs **no credentials at all** — it fetches Microsoft's own public,
+unauthenticated permissions catalogue (the same data that powers
+[learn.microsoft.com/graph/permissions-reference](https://learn.microsoft.com/en-us/graph/permissions-reference)).
+That file lives on a community/devx-tooling repo rather than a documented, versioned public API,
+so if it ever moves, fall back to querying a real tenant directly:
+
+```bash
+npm run download:graph-permissions -- --from-tenant --client-id <an-app-registration-client-id-you-control>
+```
+
+This mode signs in via MSAL device code flow (prints a URL and code to enter) and queries
+Microsoft Graph's own service principal for its `appRoles`/`oauth2PermissionScopes`; the
+signed-in account needs `Application.Read.All` or `Directory.Read.All` consented. Run
+`node scripts/downloadGraphPermissions.js --from-tenant` with no `--client-id` to see all options
+(`--tenant-id`, `--cloud`).
+
 ### Packaging
 
 There's no dedicated packaging script yet. The standard
@@ -122,6 +154,7 @@ There's no dedicated packaging script yet. The standard
 
 ```
 src/              Extension source (TypeScript)
+scripts/          Standalone dev tools, not part of the extension bundle (e.g. downloadGraphPermissions.js)
 Requirements/      Functional/non-functional requirements and use cases — source of truth
 Architecture/      Design notes for not-yet-built capabilities (not decision records)
 Example_Project/   Sample workspace content to open in the Extension Development Host

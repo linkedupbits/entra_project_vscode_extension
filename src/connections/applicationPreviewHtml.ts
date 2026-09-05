@@ -1,6 +1,7 @@
 import { RequiredPermission, FederatedCredentialEntry } from '../applications/types';
 import { ApplicationPreviewData } from './tenantApplicationPreview';
 import { parseTenantApplicationIdentity } from './tenantApplicationIdentity';
+import { describeRequiredPermission } from '../graph/wellKnownPermissions';
 
 function escapeHtml(value: string): string {
   return value
@@ -17,6 +18,13 @@ function listOrNone(items: readonly string[]): string {
   return '<ul>' + items.map((item) => `<li>${escapeHtml(item)}</li>`).join('') + '</ul>';
 }
 
+/**
+ * Resolves each permission's opaque IDs to a human-readable name via `wellKnownPermissions.ts`
+ * (e.g. Microsoft Graph's `7ab1d382-f21e-4acd-a863-ba3e13f7da61` → "Directory.Read.All") when the
+ * resourceAppId/id pair is recognised, falling back to the raw IDs — still shown alongside a
+ * resolved name, not replaced by it, so the underlying value is always visible/verifiable — when
+ * it isn't (an unrecognised resource, or the seed data's intentionally partial coverage).
+ */
 function permissionsListOrNone(permissions: readonly RequiredPermission[]): string {
   if (permissions.length === 0) {
     return '<div class="empty">None</div>';
@@ -24,9 +32,13 @@ function permissionsListOrNone(permissions: readonly RequiredPermission[]): stri
   return (
     '<ul>' +
     permissions
-      .map(
-        (p) => `<li><code>${escapeHtml(p.resourceAppId)}</code> — <code>${escapeHtml(p.id)}</code> (${escapeHtml(p.type)})</li>`
-      )
+      .map((p) => {
+        const name = describeRequiredPermission(p.resourceAppId, p.id);
+        const ids = `<code>${escapeHtml(p.resourceAppId)}</code> — <code>${escapeHtml(p.id)}</code>`;
+        return name
+          ? `<li><strong>${escapeHtml(name)}</strong> (${escapeHtml(p.type)}) — ${ids}</li>`
+          : `<li>${ids} (${escapeHtml(p.type)})</li>`;
+      })
       .join('') +
     '</ul>'
   );
