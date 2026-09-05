@@ -22,7 +22,13 @@ function okData(overrides: Partial<ApplicationPreviewData> = {}): ApplicationPre
   return {
     application: {
       kind: 'ok',
-      value: { displayName: 'My App', signInAudience: 'AzureADMyOrg', redirectUris: [], requiredPermissions: [] },
+      value: {
+        displayName: 'My App',
+        signInAudience: 'AzureADMyOrg',
+        redirectUris: [],
+        requiredPermissions: [],
+        oauth2PermissionScopes: [],
+      },
     },
     applicationPublisherDomain: '',
     resourceApplications: {},
@@ -92,7 +98,7 @@ describe('downloadApplicationToProject', () => {
     expect(savedFiles.appConfig.application_name).toBe('sample-web-app');
     expect(savedFiles.appConfig.business_unit).toBe('Customer Experience');
     expect(savedFiles.appConfig.Environments).toEqual([
-      { name: 'dev', publisherDomain: '', tenancy_type: '', environment_code: 'dev' },
+      { name: 'dev', publisherDomain: '', tenancy_type: '', environment_code: 'dev', Variables: {} },
     ]);
   });
 
@@ -172,7 +178,7 @@ describe('downloadApplicationToProject', () => {
 
     const [, savedFiles] = save.mock.calls[0];
     expect(savedFiles.appConfig.Environments).toEqual([
-      { name: 'dev', publisherDomain: '', tenancy_type: '', environment_code: 'dev' },
+      { name: 'dev', publisherDomain: '', tenancy_type: '', environment_code: 'dev', Variables: {} },
     ]);
   });
 
@@ -195,7 +201,7 @@ describe('downloadApplicationToProject', () => {
 
     const [, savedFiles] = save.mock.calls[0];
     expect(savedFiles.appConfig.Environments).toEqual([
-      { name: 'dev', publisherDomain: 'contoso.onmicrosoft.com', tenancy_type: 'workforce', environment_code: 'dev' },
+      { name: 'dev', publisherDomain: 'contoso.onmicrosoft.com', tenancy_type: 'workforce', environment_code: 'dev', Variables: {} },
     ]);
   });
 
@@ -227,6 +233,7 @@ describe('downloadApplicationToProject', () => {
       signInAudience: 'AzureADMyOrg',
       redirectUris: [],
       requiredPermissions: [],
+      oauth2PermissionScopes: [],
     };
     const { store, save } = fakeStore(
       {
@@ -283,7 +290,9 @@ describe('downloadApplicationToProject', () => {
     const existingAppConfig: AppConfig = {
       ...emptyAppConfig(),
       application_name: 'sample-web-app',
-      Environments: [{ name: 'Dev', publisherDomain: 'contoso-dev.onmicrosoft.com', tenancy_type: 'ciam', environment_code: 'dev' }],
+      Environments: [
+        { name: 'Dev', publisherDomain: 'contoso-dev.onmicrosoft.com', tenancy_type: 'ciam', environment_code: 'dev', Variables: {} },
+      ],
     };
     const { store, save } = fakeStore({
       appConfig: existingAppConfig,
@@ -296,7 +305,7 @@ describe('downloadApplicationToProject', () => {
 
     const [, savedFiles] = save.mock.calls[0];
     expect(savedFiles.appConfig.Environments).toEqual([
-      { name: 'Dev', publisherDomain: 'contoso-dev.onmicrosoft.com', tenancy_type: 'ciam', environment_code: 'dev' },
+      { name: 'Dev', publisherDomain: 'contoso-dev.onmicrosoft.com', tenancy_type: 'ciam', environment_code: 'dev', Variables: {} },
     ]);
   });
 
@@ -305,7 +314,9 @@ describe('downloadApplicationToProject', () => {
     const existingAppConfig: AppConfig = {
       ...emptyAppConfig(),
       application_name: 'sample-web-app',
-      Environments: [{ name: 'Test', publisherDomain: 'contoso-test.onmicrosoft.com', tenancy_type: 'ciam', environment_code: 'test' }],
+      Environments: [
+        { name: 'Test', publisherDomain: 'contoso-test.onmicrosoft.com', tenancy_type: 'ciam', environment_code: 'test', Variables: {} },
+      ],
     };
     const { store, save } = fakeStore({
       appConfig: existingAppConfig,
@@ -318,8 +329,8 @@ describe('downloadApplicationToProject', () => {
 
     const [, savedFiles] = save.mock.calls[0];
     expect(savedFiles.appConfig.Environments).toEqual([
-      { name: 'Test', publisherDomain: 'contoso-test.onmicrosoft.com', tenancy_type: 'ciam', environment_code: 'test' },
-      { name: 'dev', publisherDomain: '', tenancy_type: '', environment_code: 'dev' },
+      { name: 'Test', publisherDomain: 'contoso-test.onmicrosoft.com', tenancy_type: 'ciam', environment_code: 'test', Variables: {} },
+      { name: 'dev', publisherDomain: '', tenancy_type: '', environment_code: 'dev', Variables: {} },
     ]);
   });
 

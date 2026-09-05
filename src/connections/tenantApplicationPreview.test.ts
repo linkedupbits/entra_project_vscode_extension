@@ -55,6 +55,7 @@ describe('loadApplicationPreview', () => {
         signInAudience: 'AzureADMyOrg',
         redirectUris: ['https://a.example.com'],
         requiredPermissions: [],
+        oauth2PermissionScopes: [],
       },
     });
     expect(result.federatedCredentials).toEqual({

@@ -6,7 +6,13 @@ function data(overrides: Partial<ApplicationPreviewData> = {}): ApplicationPrevi
   return {
     application: {
       kind: 'ok',
-      value: { displayName: 'My App', signInAudience: 'AzureADMyOrg', redirectUris: [], requiredPermissions: [] },
+      value: {
+        displayName: 'My App',
+        signInAudience: 'AzureADMyOrg',
+        redirectUris: [],
+        requiredPermissions: [],
+        oauth2PermissionScopes: [],
+      },
     },
     applicationPublisherDomain: '',
     resourceApplications: {},
@@ -45,9 +51,9 @@ describe('buildApplicationPreviewHtml', () => {
     expect(html).toContain('AzureADMyOrg');
   });
 
-  it('shows "None" for empty redirect URIs, required permissions, and tags', () => {
+  it('shows "None" for empty redirect URIs, required permissions, exposed API scopes, and tags', () => {
     const html = buildApplicationPreviewHtml(data());
-    expect(html.match(/None/g)?.length).toBeGreaterThanOrEqual(2);
+    expect(html.match(/None/g)?.length).toBeGreaterThanOrEqual(3);
   });
 
   it('lists redirect URIs and required permissions when present', () => {
@@ -60,6 +66,7 @@ describe('buildApplicationPreviewHtml', () => {
             signInAudience: 'AzureADMyOrg',
             redirectUris: ['https://a.example.com/signin-oidc'],
             requiredPermissions: [{ resourceAppId: '00000003-0000-0000-c000-000000000000', id: 'perm-1', type: 'Scope' }],
+            oauth2PermissionScopes: [],
           },
         },
       })
@@ -85,6 +92,7 @@ describe('buildApplicationPreviewHtml', () => {
                 type: 'Role',
               },
             ],
+            oauth2PermissionScopes: [],
           },
         },
         resourceApplications: {
@@ -110,6 +118,7 @@ describe('buildApplicationPreviewHtml', () => {
             signInAudience: 'AzureADMyOrg',
             redirectUris: [],
             requiredPermissions: [{ resourceAppId: 'some-other-api', id: 'unknown-id', type: 'Scope' }],
+            oauth2PermissionScopes: [],
           },
         },
       })
@@ -127,6 +136,7 @@ describe('buildApplicationPreviewHtml', () => {
             signInAudience: 'AzureADMyOrg',
             redirectUris: [],
             requiredPermissions: [{ resourceAppId: 'some-other-api', id: 'unknown-id', type: 'Scope' }],
+            oauth2PermissionScopes: [],
           },
         },
         resourceApplications: {
@@ -135,6 +145,67 @@ describe('buildApplicationPreviewHtml', () => {
       })
     );
     expect(html).toContain('Some Other API : unknown-id');
+  });
+
+  it('renders an exposed API scope with its value, type, and enabled status', () => {
+    const html = buildApplicationPreviewHtml(
+      data({
+        application: {
+          kind: 'ok',
+          value: {
+            displayName: 'My App',
+            signInAudience: 'AzureADMyOrg',
+            redirectUris: [],
+            requiredPermissions: [],
+            oauth2PermissionScopes: [
+              {
+                id: '11111111-1111-1111-1111-111111111111',
+                value: 'access_as_user',
+                type: 'User',
+                adminConsentDisplayName: 'Access My App',
+                adminConsentDescription: 'Allows access on behalf of the user.',
+                userConsentDisplayName: 'Access My App',
+                userConsentDescription: 'Allows access on your behalf.',
+                isEnabled: true,
+              },
+            ],
+          },
+        },
+      })
+    );
+    expect(html).toContain('access_as_user');
+    expect(html).toContain('User');
+    expect(html).toContain('enabled');
+  });
+
+  it('shows a disabled exposed API scope as disabled', () => {
+    const html = buildApplicationPreviewHtml(
+      data({
+        application: {
+          kind: 'ok',
+          value: {
+            displayName: 'My App',
+            signInAudience: 'AzureADMyOrg',
+            redirectUris: [],
+            requiredPermissions: [],
+            oauth2PermissionScopes: [
+              {
+                id: 'x',
+                value: 'legacy_scope',
+                type: 'Admin',
+                adminConsentDisplayName: '',
+                adminConsentDescription: '',
+                userConsentDisplayName: '',
+                userConsentDescription: '',
+                isEnabled: false,
+              },
+            ],
+          },
+        },
+      })
+    );
+    expect(html).toContain('legacy_scope');
+    expect(html).toContain('disabled');
   });
 
   it('renders each federated credential with its fields', () => {
@@ -215,6 +286,7 @@ describe('buildApplicationPreviewHtml', () => {
             signInAudience: 'AzureADMyOrg',
             redirectUris: [],
             requiredPermissions: [],
+            oauth2PermissionScopes: [],
           },
         },
       })

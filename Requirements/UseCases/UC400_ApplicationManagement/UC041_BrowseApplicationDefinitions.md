@@ -45,11 +45,11 @@ Like [UC033 — View Local Project Artifacts](../UC300_ArtifactBrowsing/UC033_Vi
 ## Postconditions
 
 * The user can see every application definition currently in the project, and open the structured details or the combined document for any of them, without needing network access, authentication, or any deploy tooling to exist.
-* Saving the combined document leaves all four files satisfying UC040's format, with the same comment/anchor/unmodelled-field loss UC042's Postconditions already document and accept — this is the same parse-and-rewrite approach, not a stricter or looser one.
+* Saving the combined document leaves all four files satisfying UC040's format, with the same comment/unmodelled-field loss UC042's Postconditions already document and accept (its `Variables: &DefaultVariables` merge key is specifically preserved, not lost) — this is the same parse-and-rewrite approach, not a stricter or looser one.
 
 ## Related
 
 * [UC040 — Define an Application](UC040_DefineApplication.md) — defines the file format and folder structure this use case reads; also the source of the open questions this use case deliberately does not resolve (creation, validation, rendering, deployment).
-* [UC042 — View Application Details](UC042_ViewApplicationDetails.md) — what clicking an application node opens, and the source of the comment/anchor/unmodelled-field loss the combined document shares.
+* [UC042 — View Application Details](UC042_ViewApplicationDetails.md) — what clicking an application node opens, and the source of the comment/unmodelled-field loss the combined document shares.
 * [UC029 — Navigate the Entra Tree](../UC300_ArtifactBrowsing/UC029_NavigateEntraTree.md) — the overall tree this is part of.
 * [UC033 — View Local Project Artifacts](../UC300_ArtifactBrowsing/UC033_ViewLocalProjectArtifacts.md) — the closest existing precedent (local, offline browsing of the project structure), diverging deliberately on file-watching (A2).

@@ -92,6 +92,7 @@ export async function downloadApplicationToProject(
             publisherDomain: enrichFromConnection ? data.applicationPublisherDomain : '',
             tenancy_type: enrichFromConnection ? tenancyTypeFor(connection) : '',
             environment_code: environment,
+            Variables: {},
           },
         ];
 

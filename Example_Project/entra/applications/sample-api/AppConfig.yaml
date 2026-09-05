@@ -1,18 +1,21 @@
 application_name: sample-api
 business_unit: Funds
 Variables: &DefaultVariables
-  owner_email: platform-team@example.com
-Environments: 
+  owner_email: platformteam@example.com
+Environments:
   - name: Dev
     publisherDomain: contoso-dev.onmicrosoft.com
     tenancy_type: workforce
     environment_code: dev
-    Variables: 
+    Variables:
       <<: *DefaultVariables
+      owner_email: platformteam2@example.com
+      MyScopeId: 58bdbfaf-6627-489e-a2fd-74e62a302809
   - name: Prod
     publisherDomain: contoso.onmicrosoft.com
     tenancy_type: workforce
     environment_code: prod
-    Variables: 
+    Variables:
       <<: *DefaultVariables
+      MyScopeId: b7e74087-ee36-4fab-94c0-3bee5c5193fe
 Dependencies: {}

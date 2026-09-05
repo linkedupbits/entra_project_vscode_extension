@@ -5,10 +5,13 @@ import {
   DependencyEntry,
   EnvironmentEntry,
   FederatedCredentialEntry,
+  Oauth2PermissionScopeEntry,
   RequiredPermission,
   ServicePrincipalFields,
   SignInAudience,
 } from './types';
+import * as crypto from 'crypto';
+import { buildEnvironmentVariableIdReference, parseEnvironmentVariableIdName } from './oauth2ScopeIdReference';
 
 export interface VariableRowInput {
   key: string;
@@ -20,6 +23,8 @@ export interface EnvironmentRowInput {
   publisherDomain: string;
   tenancy_type: string;
   environment_code: string;
+  /** Carried through unedited by this row's own UI — see EnvironmentEntry.Variables' doc comment. */
+  variables: Record<string, string>;
 }
 
 /** `appName` is picked from the project's existing application folders, not free text — see ApplicationEditorProvider. */
@@ -34,11 +39,30 @@ export interface RequiredPermissionRowInput {
   type: string;
 }
 
+/**
+ * See Oauth2PermissionScopeEntry — this is its raw, unresolved form as posted from the webview.
+ * `id` is the row's fallback id (a random GUID generated when the row was first added, or whatever
+ * was already on disk) — used as-is only when `idVariableName` is blank; see
+ * resolveOauth2PermissionScopes.
+ */
+export interface Oauth2PermissionScopeRowInput {
+  id: string;
+  idVariableName: string;
+  value: string;
+  type: string;
+  adminConsentDisplayName: string;
+  adminConsentDescription: string;
+  userConsentDisplayName: string;
+  userConsentDescription: string;
+  isEnabled: boolean;
+}
+
 export interface ApplicationFieldsInput {
   displayName: string;
   signInAudience: string;
   redirectUris: string[];
   requiredPermissions: RequiredPermissionRowInput[];
+  oauth2PermissionScopes: Oauth2PermissionScopeRowInput[];
 }
 
 /** `audiences` arrives as one comma-separated field from the form — see FederatedCredentialEntry's doc comment. */
@@ -125,7 +149,49 @@ function resolveApplication(input: ApplicationFieldsInput): ApplicationFields {
     signInAudience: coerceSignInAudience(input.signInAudience),
     redirectUris,
     requiredPermissions,
+    oauth2PermissionScopes: resolveOauth2PermissionScopes(input.oauth2PermissionScopes),
   };
+}
+
+/**
+ * Same "structural cleanup, not hard validation" treatment as the rest of the Application section
+ * (see resolveApplicationSubmit's doc comment) — a row is only dropped as an unused spacer if every
+ * user-entered field is blank; `id`/`idVariableName`/`isEnabled` are excluded from that check since
+ * a fresh row always carries an auto-generated id and a default-enabled checkbox even before the
+ * user has typed anything else into it.
+ *
+ * `id` resolution: a non-blank `idVariableName` always wins, becoming
+ * `{{ environment.Variables.<name> }}` (see oauth2ScopeIdReference.ts) — letting the actual id
+ * value be parked per-environment (AppConfig.yaml's Variables, UC040) rather than fixed at
+ * authoring time. A blank `idVariableName` falls back to the row's own `id` unchanged, so a raw
+ * GUID already on disk (e.g. from a downloaded tenant application) is never silently overwritten
+ * just because this field was left empty.
+ */
+function resolveOauth2PermissionScopes(rows: readonly Oauth2PermissionScopeRowInput[]): Oauth2PermissionScopeEntry[] {
+  const entries: Oauth2PermissionScopeEntry[] = [];
+  for (const row of rows) {
+    const value = row.value.trim();
+    const adminConsentDisplayName = row.adminConsentDisplayName.trim();
+    const adminConsentDescription = row.adminConsentDescription.trim();
+    const userConsentDisplayName = row.userConsentDisplayName.trim();
+    const userConsentDescription = row.userConsentDescription.trim();
+    if (!value && !adminConsentDisplayName && !adminConsentDescription && !userConsentDisplayName && !userConsentDescription) {
+      continue; // blank spacer row
+    }
+    const idVariableName = row.idVariableName.trim();
+    const id = idVariableName ? buildEnvironmentVariableIdReference(idVariableName) : row.id.trim();
+    entries.push({
+      id,
+      value,
+      type: row.type === 'Admin' ? 'Admin' : 'User',
+      adminConsentDisplayName,
+      adminConsentDescription,
+      userConsentDisplayName,
+      userConsentDescription,
+      isEnabled: row.isEnabled,
+    });
+  }
+  return entries;
 }
 
 function resolveFederatedCredentials(rows: readonly FederatedCredentialRowInput[]): FederatedCredentialEntry[] {
@@ -211,8 +277,10 @@ export function resolveApplicationSubmit(input: ApplicationFormInput): Applicati
       publisherDomain: row.publisherDomain.trim(),
       tenancy_type: row.tenancy_type.trim(),
       environment_code: row.environment_code.trim(),
+      Variables: { ...row.variables },
     });
   }
+  mergeDefaultVariablesIntoEnvironments(variables, environments);
 
   const dependencies: Record<string, DependencyEntry> = {};
   for (const row of input.dependencies) {
@@ -249,13 +317,68 @@ export function resolveApplicationSubmit(input: ApplicationFormInput): Applicati
     }
   }
 
+  const application = resolveApplication(input.application);
+  ensureOauth2ScopeIdVariablesInEnvironments(application.oauth2PermissionScopes, environments);
+
   return {
     kind: 'ok',
     files: {
       appConfig,
-      application: resolveApplication(input.application),
+      application,
       federatedCredentials: resolveFederatedCredentials(input.federatedCredentials),
       servicePrincipal,
     },
   };
+}
+
+/**
+ * `AppConfig.yaml`'s shared, top-level `Variables` are meant to be visible from every environment's
+ * own `Variables` map too (see `Example_Project`'s `AppConfig.yaml`, which expresses this with a
+ * YAML anchor/merge key — `Variables: &DefaultVariables` / `<<: *DefaultVariables` — a hand-authored
+ * convenience this form can't preserve since it re-serializes fresh on every save, per UC042's
+ * documented anchor-loss tradeoff). This achieves the same practical effect without the anchor
+ * syntax: every default is copied into each environment's own map, with that environment's own
+ * entries (including whatever `ensureOauth2ScopeIdVariablesInEnvironments` adds afterward) taking
+ * precedence over a default of the same key, mirroring how a YAML merge key's explicit keys win
+ * over its merged-in ones.
+ */
+function mergeDefaultVariablesIntoEnvironments(
+  defaults: Record<string, string>,
+  environments: readonly EnvironmentEntry[]
+): void {
+  for (const environment of environments) {
+    environment.Variables = { ...defaults, ...environment.Variables };
+  }
+}
+
+/**
+ * Whenever an Exposed API scope's `id` resolved to an `{{ environment.Variables.<key> }}`
+ * reference (see resolveOauth2PermissionScopes/oauth2ScopeIdReference.ts), that key must actually
+ * exist in *every* environment's `Variables` map for the reference to resolve to anything once
+ * deploy tooling exists — so this guarantees it does, generating a fresh GUID for any environment
+ * where it's still missing (a real GUID is exactly as valid a placeholder as any other, since Graph
+ * only requires *a* GUID-shaped id, not a specific one) without disturbing an environment that
+ * already has a value for that key, or any of its other Variables entries.
+ */
+function ensureOauth2ScopeIdVariablesInEnvironments(
+  scopes: readonly Oauth2PermissionScopeEntry[],
+  environments: readonly EnvironmentEntry[]
+): void {
+  const variableNames = new Set<string>();
+  for (const scope of scopes) {
+    const name = parseEnvironmentVariableIdName(scope.id);
+    if (name) {
+      variableNames.add(name);
+    }
+  }
+  if (variableNames.size === 0) {
+    return;
+  }
+  for (const environment of environments) {
+    for (const name of variableNames) {
+      if (!Object.prototype.hasOwnProperty.call(environment.Variables, name)) {
+        environment.Variables[name] = crypto.randomUUID();
+      }
+    }
+  }
 }

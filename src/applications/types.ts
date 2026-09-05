@@ -1,3 +1,5 @@
+import * as YAML from 'yaml';
+
 /**
  * Field names here are exactly as specified for AppConfig.yaml (UC040) — including its mixed
  * casing (`application_name`, `publisherDomain`, `tenancy_type`) — deliberately not translated to
@@ -9,6 +11,16 @@ export interface EnvironmentEntry {
   publisherDomain: string;
   tenancy_type: string;
   environment_code: string;
+  /**
+   * Per-environment values, distinct from AppConfig.yaml's shared top-level `Variables` — this is
+   * where UC042's editor parks an `Exposed API scopes` row's generated `id`, referenced from
+   * `Application.yaml.j2` as `{{ environment.Variables.<key> }}` (see `oauth2ScopeIdReference.ts`),
+   * so the same logical scope's id can be a fixed real GUID per deployment target without hardcoding
+   * one directly into the template. Not surfaced as its own editable UI (yet) — see
+   * `resolveApplicationSubmit`'s `ensureOauth2ScopeIdVariablesInEnvironments` for how a referenced
+   * key is guaranteed to exist here, generating a GUID for it if missing, on every save.
+   */
+  Variables: Record<string, string>;
 }
 
 /**
@@ -59,11 +71,34 @@ export interface RequiredPermission {
   type: 'Role' | 'Scope';
 }
 
+/**
+ * One entry in `Application.yaml.j2`'s `api.oauth2PermissionScopes` — a delegated permission scope
+ * this application *exposes* for other applications to request, the mirror image of
+ * `RequiredPermission` above (which is what this application requests *from* other resources).
+ * Field names and shapes match Graph's `permissionScope` type exactly, one row per scope with no
+ * flattening/grouping needed (unlike `RequiredPermission`, there's no nested list-of-lists here).
+ * `id` is a GUID Graph uses to match this scope across updates — once a scope has been deployed,
+ * changing its `id` would cause a redeploy to create a new scope rather than update the existing
+ * one, so UC042's editor generates one automatically for a new row and otherwise leaves it alone
+ * (see `applicationEditorHtml.ts`), never exposing it as something a user hand-edits.
+ */
+export interface Oauth2PermissionScopeEntry {
+  id: string;
+  value: string;
+  type: 'User' | 'Admin';
+  adminConsentDisplayName: string;
+  adminConsentDescription: string;
+  userConsentDisplayName: string;
+  userConsentDescription: string;
+  isEnabled: boolean;
+}
+
 export interface ApplicationFields {
   displayName: string;
   signInAudience: SignInAudience;
   redirectUris: string[];
   requiredPermissions: RequiredPermission[];
+  oauth2PermissionScopes: Oauth2PermissionScopeEntry[];
 }
 
 /**
@@ -99,7 +134,7 @@ export function emptyAppConfig(): AppConfig {
 }
 
 export function emptyApplicationFields(): ApplicationFields {
-  return { displayName: '', signInAudience: 'AzureADMyOrg', redirectUris: [], requiredPermissions: [] };
+  return { displayName: '', signInAudience: 'AzureADMyOrg', redirectUris: [], requiredPermissions: [], oauth2PermissionScopes: [] };
 }
 
 export function emptyServicePrincipalFields(): ServicePrincipalFields {
@@ -115,6 +150,29 @@ function asStringArray(value: unknown): string[] {
 }
 
 /**
+ * A "Variables" map's values are meant to be plain scalars — a number/boolean is coerced to its
+ * string form (e.g. `retries: 3` becomes `'3'`), same as everywhere else in this schema that
+ * tolerates a slightly-off type rather than dropping the value. An object/array value is skipped
+ * instead of coerced: `String()`-ing one produces useless text like `"[object Object]"`, which
+ * would silently corrupt the map rather than describe it — most likely from a YAML merge key
+ * (`<<: *Anchor`) the `yaml` package left unresolved as a literal `"<<"` entry rather than
+ * splicing in the anchor's own keys, since this codebase doesn't enable YAML 1.1 merge-key support.
+ */
+function asVariablesRecord(value: unknown): Record<string, string> {
+  const result: Record<string, string> = {};
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+      if (typeof v === 'string') {
+        result[key] = v;
+      } else if (typeof v === 'number' || typeof v === 'boolean') {
+        result[key] = String(v);
+      }
+    }
+  }
+  return result;
+}
+
+/**
  * AppConfig.yaml has no fixed schema enforced elsewhere, so a hand-edited file could be missing
  * fields, have the wrong types, or (per UC040) carry extra keys on an environment this form
  * doesn't know about. This normalizes whatever YAML.parse() produced into the shape the
@@ -127,12 +185,7 @@ export function normalizeAppConfig(parsed: unknown): AppConfig {
   }
   const obj = parsed as Record<string, unknown>;
 
-  const variables: Record<string, string> = {};
-  if (obj.Variables && typeof obj.Variables === 'object') {
-    for (const [key, value] of Object.entries(obj.Variables as Record<string, unknown>)) {
-      variables[key] = typeof value === 'string' ? value : String(value);
-    }
-  }
+  const variables = asVariablesRecord(obj.Variables);
 
   const environments: EnvironmentEntry[] = Array.isArray(obj.Environments)
     ? obj.Environments.map((entry) => normalizeEnvironmentEntry(entry))
@@ -161,6 +214,7 @@ function normalizeEnvironmentEntry(entry: unknown): EnvironmentEntry {
     publisherDomain: asString(obj.publisherDomain),
     tenancy_type: asString(obj.tenancy_type),
     environment_code: asString(obj.environment_code),
+    Variables: asVariablesRecord(obj.Variables),
   };
 }
 
@@ -180,6 +234,7 @@ export function normalizeApplicationFields(parsed: unknown): ApplicationFields {
   }
   const obj = parsed as Record<string, unknown>;
   const web = obj.web && typeof obj.web === 'object' ? (obj.web as Record<string, unknown>) : {};
+  const api = obj.api && typeof obj.api === 'object' ? (obj.api as Record<string, unknown>) : {};
   const signInAudience = SIGN_IN_AUDIENCES.includes(obj.signInAudience as SignInAudience)
     ? (obj.signInAudience as SignInAudience)
     : 'AzureADMyOrg';
@@ -189,7 +244,30 @@ export function normalizeApplicationFields(parsed: unknown): ApplicationFields {
     signInAudience,
     redirectUris: asStringArray(web.redirectUris),
     requiredPermissions: flattenRequiredResourceAccess(obj.requiredResourceAccess),
+    oauth2PermissionScopes: normalizeOauth2PermissionScopes(api.oauth2PermissionScopes),
   };
+}
+
+function normalizeOauth2PermissionScopes(parsed: unknown): Oauth2PermissionScopeEntry[] {
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+  return parsed.map((entry) => {
+    const obj = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {};
+    return {
+      id: asString(obj.id),
+      value: asString(obj.value),
+      type: obj.type === 'Admin' ? 'Admin' : 'User',
+      adminConsentDisplayName: asString(obj.adminConsentDisplayName),
+      adminConsentDescription: asString(obj.adminConsentDescription),
+      userConsentDisplayName: asString(obj.userConsentDisplayName),
+      userConsentDescription: asString(obj.userConsentDescription),
+      // Graph itself defaults a scope to enabled when the field is omitted at creation, so an
+      // absent/non-boolean value here is treated as enabled too — unlike appRoleAssignmentRequired
+      // below, whose Graph default is false.
+      isEnabled: obj.isEnabled !== false,
+    };
+  });
 }
 
 function flattenRequiredResourceAccess(parsed: unknown): RequiredPermission[] {
@@ -250,6 +328,76 @@ export function serializeApplication(fields: ApplicationFields): Record<string, 
   const grouped = groupRequiredPermissions(fields.requiredPermissions);
   if (grouped.length > 0) {
     result.requiredResourceAccess = grouped;
+  }
+  if (fields.oauth2PermissionScopes.length > 0) {
+    result.api = { oauth2PermissionScopes: fields.oauth2PermissionScopes.map(serializeOauth2PermissionScopeEntry) };
+  }
+  return result;
+}
+
+function serializeOauth2PermissionScopeEntry(entry: Oauth2PermissionScopeEntry): Record<string, unknown> {
+  return {
+    id: entry.id,
+    adminConsentDescription: entry.adminConsentDescription,
+    adminConsentDisplayName: entry.adminConsentDisplayName,
+    isEnabled: entry.isEnabled,
+    type: entry.type,
+    userConsentDescription: entry.userConsentDescription,
+    userConsentDisplayName: entry.userConsentDisplayName,
+    value: entry.value,
+  };
+}
+
+/**
+ * `AppConfig.appConfig.Environments[].Variables` always holds each environment's full *effective*
+ * set (shared defaults already merged in — see `applicationFormLogic.ts`'s
+ * `mergeDefaultVariablesIntoEnvironments`), which is the simplest in-memory shape to work with. On
+ * disk, though, UC040 wants the shared values expressed once via a YAML anchor/merge key
+ * (`Variables: &DefaultVariables` / `<<: *DefaultVariables`) rather than duplicated into every
+ * environment as literal text — both for a human reading the file, and so hand-editing a default
+ * actually changes it everywhere at once, same as before this form existed. This builds that node
+ * directly (via the `yaml` package's `Document`/`Node` API, not a plain-object `YAML.stringify()`,
+ * which has no way to express an alias) by writing back only each environment's *overrides* — a key
+ * that's either new or has a different value than the shared default — alongside a `<<` alias
+ * pointing at one shared, anchored `Variables` node. Reading such a file back still yields the full
+ * effective set per environment, since merge-key resolution is enabled wherever this schema is
+ * parsed (`{ merge: true }`) — see `ApplicationStore`/`applicationDocumentContent.ts`.
+ */
+export function buildAppConfigNode(doc: YAML.Document, appConfig: AppConfig): YAML.YAMLMap {
+  const hasDefaults = Object.keys(appConfig.Variables).length > 0 && appConfig.Environments.length > 0;
+
+  const node = doc.createNode({
+    application_name: appConfig.application_name,
+    business_unit: appConfig.business_unit,
+    Variables: appConfig.Variables,
+    Environments: appConfig.Environments.map((environment) => ({
+      name: environment.name,
+      publisherDomain: environment.publisherDomain,
+      tenancy_type: environment.tenancy_type,
+      environment_code: environment.environment_code,
+      Variables: hasDefaults ? overridesOnly(environment.Variables, appConfig.Variables) : environment.Variables,
+    })),
+    Dependencies: appConfig.Dependencies,
+  }) as YAML.YAMLMap;
+
+  if (hasDefaults) {
+    const variablesNode = node.get('Variables', true) as unknown as YAML.YAMLMap;
+    const environmentsNode = node.get('Environments', true) as unknown as YAML.YAMLSeq;
+    for (const environmentNode of environmentsNode.items as YAML.YAMLMap[]) {
+      const environmentVariablesNode = environmentNode.get('Variables', true) as unknown as YAML.YAMLMap;
+      environmentVariablesNode.items.unshift(doc.createPair('<<', doc.createAlias(variablesNode, 'DefaultVariables')));
+    }
+  }
+
+  return node;
+}
+
+function overridesOnly(variables: Record<string, string>, defaults: Record<string, string>): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(variables)) {
+    if (defaults[key] !== value) {
+      result[key] = value;
+    }
   }
   return result;
 }

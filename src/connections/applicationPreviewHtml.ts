@@ -1,4 +1,4 @@
-import { RequiredPermission, FederatedCredentialEntry } from '../applications/types';
+import { RequiredPermission, Oauth2PermissionScopeEntry, FederatedCredentialEntry } from '../applications/types';
 import { GraphResourceApplication } from '../graph/graphClient';
 import { ApplicationPreviewData } from './tenantApplicationPreview';
 import { parseTenantApplicationIdentity } from './tenantApplicationIdentity';
@@ -44,6 +44,29 @@ function permissionsListOrNone(
         const permissionLabel = resource?.permissions[p.id]?.name ?? p.id;
         const ids = `<code>${escapeHtml(p.resourceAppId)}</code> : <code>${escapeHtml(p.id)}</code>`;
         return `<li>${escapeHtml(appLabel)} : ${escapeHtml(permissionLabel)} (${ids})</li>`;
+      })
+      .join('') +
+    '</ul>'
+  );
+}
+
+/**
+ * Delegated scopes this application exposes (the mirror image of the required-permissions section
+ * above, which is what it requests) — UC042's editor is where these are managed; here they're
+ * shown read-only as `value — Type, enabled/disabled`, no permission-name resolution needed since
+ * `value` (e.g. `Files.Read`) is already the human-readable form, unlike a required permission's
+ * bare GUID.
+ */
+function oauth2PermissionScopesListOrNone(scopes: readonly Oauth2PermissionScopeEntry[]): string {
+  if (scopes.length === 0) {
+    return '<div class="empty">None</div>';
+  }
+  return (
+    '<ul>' +
+    scopes
+      .map((scope) => {
+        const status = scope.isEnabled ? 'enabled' : 'disabled';
+        return `<li><code>${escapeHtml(scope.value || '(no value)')}</code> — ${escapeHtml(scope.type)}, ${status}</li>`;
       })
       .join('') +
     '</ul>'
@@ -109,7 +132,9 @@ export function buildApplicationPreviewHtml(data: ApplicationPreviewData): strin
     <h3>Redirect URIs</h3>
     ${listOrNone(data.application.value.redirectUris)}
     <h3>Required permissions</h3>
-    ${permissionsListOrNone(data.application.value.requiredPermissions, data.resourceApplications)}`;
+    ${permissionsListOrNone(data.application.value.requiredPermissions, data.resourceApplications)}
+    <h3>Exposed API scopes</h3>
+    ${oauth2PermissionScopesListOrNone(data.application.value.oauth2PermissionScopes)}`;
 
   const federatedCredentialsSection =
     data.federatedCredentials.kind === 'error'

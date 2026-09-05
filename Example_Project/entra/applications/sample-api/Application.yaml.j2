@@ -5,3 +5,13 @@ requiredResourceAccess:
     resourceAccess:
       - id: df021288-bdef-4463-88db-98f22de89214
         type: Role
+api:
+  oauth2PermissionScopes:
+    - id: "{{ environment.Variables.MyScopeId }}"
+      adminConsentDescription: sdsd
+      adminConsentDisplayName: sdsds
+      isEnabled: true
+      type: Admin
+      userConsentDescription: ""
+      userConsentDisplayName: ""
+      value: something2

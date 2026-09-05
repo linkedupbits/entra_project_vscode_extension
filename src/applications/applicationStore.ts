@@ -11,6 +11,7 @@ import {
   normalizeServicePrincipalFields,
   serializeApplication,
   serializeServicePrincipal,
+  buildAppConfigNode,
 } from './types';
 
 const APP_CONFIG_FILE = 'AppConfig.yaml';
@@ -21,7 +22,10 @@ const SERVICE_PRINCIPAL_TEMPLATE_FILE = 'ServicePrincipal.yaml.j2';
 async function readYamlOrDefault<T>(uri: vscode.Uri, normalize: (parsed: unknown) => T, fallback: () => T): Promise<T> {
   try {
     const bytes = await vscode.workspace.fs.readFile(uri);
-    return normalize(YAML.parse(Buffer.from(bytes).toString('utf8')));
+    // `merge: true` resolves a `<<: *Anchor` YAML merge key (see AppConfig.yaml's per-environment
+    // `Variables`, UC040) into real, flattened entries — without it, `<<` would parse as a literal
+    // (and useless) map key. Harmless for the other three files, which never use merge keys.
+    return normalize(YAML.parse(Buffer.from(bytes).toString('utf8'), { merge: true }));
   } catch (err) {
     if (err instanceof vscode.FileSystemError && err.code === 'FileNotFound') {
       return fallback();
@@ -33,12 +37,14 @@ async function readYamlOrDefault<T>(uri: vscode.Uri, normalize: (parsed: unknown
 /**
  * Loads/saves one application's four files (UC040) as a unit, for the structured webview (UC042).
  * All four are parsed/serialized as YAML — see UC042's documented, accepted limitation: hand-written
- * comments, the `Variables: &DefaultVariables`-style YAML anchor, and any fields this schema
- * doesn't model (e.g. an environment's extra keys, or Application.yaml.j2's `implicitGrantSettings`)
- * are lost on save, since each file is parsed to a plain object and re-stringified fresh rather
- * than edited in place. Accepted deliberately — see UC042 — rather than solved with a
- * comment/anchor-preserving CST edit, which would be considerably more complex for comparatively
- * little value given these files are expected to be reviewed via `git diff` on commit anyway.
+ * comments, and any fields this schema doesn't model (e.g. an `Application.yaml.j2` key like
+ * `implicitGrantSettings`), are lost on save, since each file is parsed to a plain object and
+ * re-stringified fresh rather than edited in place. Accepted deliberately — see UC042 — rather than
+ * solved with a comment-preserving CST edit, which would be considerably more complex for
+ * comparatively little value given these files are expected to be reviewed via `git diff` on commit
+ * anyway. `AppConfig.yaml`'s `Variables: &DefaultVariables` / per-environment
+ * `<<: *DefaultVariables` merge key is the one exception that *is* preserved, via
+ * `buildAppConfigNode()` — see its own doc comment in `types.ts`.
  */
 export class ApplicationStore {
   async load(folderUri: vscode.Uri): Promise<ApplicationFiles> {
@@ -93,10 +99,12 @@ export class ApplicationStore {
 
   async save(folderUri: vscode.Uri, files: ApplicationFiles): Promise<void> {
     await vscode.workspace.fs.createDirectory(folderUri);
+    const appConfigDoc = new YAML.Document();
+    appConfigDoc.contents = buildAppConfigNode(appConfigDoc, files.appConfig);
     await Promise.all([
       vscode.workspace.fs.writeFile(
         vscode.Uri.joinPath(folderUri, APP_CONFIG_FILE),
-        Buffer.from(YAML.stringify(files.appConfig), 'utf8')
+        Buffer.from(appConfigDoc.toString(), 'utf8')
       ),
       vscode.workspace.fs.writeFile(
         vscode.Uri.joinPath(folderUri, APPLICATION_TEMPLATE_FILE),

@@ -1,6 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import { resolveApplicationSubmit, ApplicationFormInput } from './applicationFormLogic';
 
+function env(overrides: Partial<ApplicationFormInput['environments'][number]> = {}) {
+  return {
+    name: 'Dev',
+    publisherDomain: 'contoso-dev.onmicrosoft.com',
+    tenancy_type: 'ciam',
+    environment_code: 'dev',
+    variables: {},
+    ...overrides,
+  };
+}
+
 function formInput(overrides: Partial<ApplicationFormInput> = {}): ApplicationFormInput {
   return {
     application_name: 'sample-web-app',
@@ -8,7 +19,13 @@ function formInput(overrides: Partial<ApplicationFormInput> = {}): ApplicationFo
     variables: [],
     environments: [],
     dependencies: [],
-    application: { displayName: '', signInAudience: 'AzureADMyOrg', redirectUris: [], requiredPermissions: [] },
+    application: {
+      displayName: '',
+      signInAudience: 'AzureADMyOrg',
+      redirectUris: [],
+      requiredPermissions: [],
+      oauth2PermissionScopes: [],
+    },
     federatedCredentials: [],
     servicePrincipal: { appId: '', appRoleAssignmentRequired: false, tags: [] },
     ...overrides,
@@ -113,17 +130,11 @@ describe('resolveApplicationSubmit', () => {
   });
 
   describe('environments', () => {
-    const env = (overrides: Partial<ApplicationFormInput['environments'][number]> = {}) => ({
-      name: 'Dev',
-      publisherDomain: 'contoso-dev.onmicrosoft.com',
-      tenancy_type: 'ciam',
-      environment_code: 'dev',
-      ...overrides,
-    });
-
     it('drops a fully-blank row silently', () => {
       const result = resolveApplicationSubmit(
-        formInput({ environments: [{ name: '', publisherDomain: '', tenancy_type: '', environment_code: '' }] })
+        formInput({
+          environments: [{ name: '', publisherDomain: '', tenancy_type: '', environment_code: '', variables: {} }],
+        })
       );
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
@@ -150,8 +161,20 @@ describe('resolveApplicationSubmit', () => {
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
         expect(result.files.appConfig.Environments).toEqual([
-          { name: 'Dev', publisherDomain: 'contoso-dev.onmicrosoft.com', tenancy_type: 'ciam', environment_code: 'dev' },
-          { name: 'Test', publisherDomain: 'contoso-dev.onmicrosoft.com', tenancy_type: 'ciam', environment_code: 'test' },
+          {
+            name: 'Dev',
+            publisherDomain: 'contoso-dev.onmicrosoft.com',
+            tenancy_type: 'ciam',
+            environment_code: 'dev',
+            Variables: {},
+          },
+          {
+            name: 'Test',
+            publisherDomain: 'contoso-dev.onmicrosoft.com',
+            tenancy_type: 'ciam',
+            environment_code: 'test',
+            Variables: {},
+          },
         ]);
       }
     });
@@ -166,6 +189,7 @@ describe('resolveApplicationSubmit', () => {
             signInAudience: 'AzureADMyOrg',
             redirectUris: ['  https://a.example.com/signin-oidc  ', '   ', ''],
             requiredPermissions: [],
+            oauth2PermissionScopes: [],
           },
         })
       );
@@ -179,7 +203,13 @@ describe('resolveApplicationSubmit', () => {
     it('coerces an unrecognised signInAudience to the default', () => {
       const result = resolveApplicationSubmit(
         formInput({
-          application: { displayName: '', signInAudience: 'NotARealValue', redirectUris: [], requiredPermissions: [] },
+          application: {
+            displayName: '',
+            signInAudience: 'NotARealValue',
+            redirectUris: [],
+            requiredPermissions: [],
+            oauth2PermissionScopes: [],
+          },
         })
       );
       expect(result.kind).toBe('ok');
@@ -196,7 +226,15 @@ describe('resolveApplicationSubmit', () => {
         'PersonalMicrosoftAccount',
       ] as const) {
         const result = resolveApplicationSubmit(
-          formInput({ application: { displayName: '', signInAudience: value, redirectUris: [], requiredPermissions: [] } })
+          formInput({
+            application: {
+              displayName: '',
+              signInAudience: value,
+              redirectUris: [],
+              requiredPermissions: [],
+              oauth2PermissionScopes: [],
+            },
+          })
         );
         expect(result.kind).toBe('ok');
         if (result.kind === 'ok') {
@@ -213,6 +251,7 @@ describe('resolveApplicationSubmit', () => {
             signInAudience: 'AzureADMyOrg',
             redirectUris: [],
             requiredPermissions: [{ resourceAppId: '  ', id: '  ', type: 'Scope' }],
+            oauth2PermissionScopes: [],
           },
         })
       );
@@ -230,6 +269,7 @@ describe('resolveApplicationSubmit', () => {
             signInAudience: 'AzureADMyOrg',
             redirectUris: [],
             requiredPermissions: [{ resourceAppId: '  00000003-...  ', id: '  abc  ', type: 'NotAType' }],
+            oauth2PermissionScopes: [],
           },
         })
       );
@@ -249,12 +289,290 @@ describe('resolveApplicationSubmit', () => {
             signInAudience: 'AzureADMyOrg',
             redirectUris: [],
             requiredPermissions: [{ resourceAppId: 'x', id: 'y', type: 'Role' }],
+            oauth2PermissionScopes: [],
           },
         })
       );
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
         expect(result.files.application.requiredPermissions[0].type).toBe('Role');
+      }
+    });
+  });
+
+  describe('oauth2PermissionScopes', () => {
+    it('drops a row that is entirely blank', () => {
+      const result = resolveApplicationSubmit(
+        formInput({
+          application: {
+            displayName: '',
+            signInAudience: 'AzureADMyOrg',
+            redirectUris: [],
+            requiredPermissions: [],
+            oauth2PermissionScopes: [
+              {
+                id: 'auto-generated-id',
+                idVariableName: '',
+                value: ' ',
+                type: 'User',
+                adminConsentDisplayName: ' ',
+                adminConsentDescription: ' ',
+                userConsentDisplayName: ' ',
+                userConsentDescription: ' ',
+                isEnabled: true,
+              },
+            ],
+          },
+        })
+      );
+      expect(result.kind).toBe('ok');
+      if (result.kind === 'ok') {
+        expect(result.files.application.oauth2PermissionScopes).toEqual([]);
+      }
+    });
+
+    it('trims fields, coerces an invalid type to User, and passes isEnabled through unchanged', () => {
+      const result = resolveApplicationSubmit(
+        formInput({
+          application: {
+            displayName: '',
+            signInAudience: 'AzureADMyOrg',
+            redirectUris: [],
+            requiredPermissions: [],
+            oauth2PermissionScopes: [
+              {
+                id: '  11111111-1111-1111-1111-111111111111  ',
+                idVariableName: '',
+                value: '  access_as_user  ',
+                type: 'NotAType',
+                adminConsentDisplayName: '  Access sample-web-app  ',
+                adminConsentDescription: '  Allows access on behalf of the user.  ',
+                userConsentDisplayName: '  Access sample-web-app  ',
+                userConsentDescription: '  Allows access on your behalf.  ',
+                isEnabled: false,
+              },
+            ],
+          },
+        })
+      );
+      expect(result.kind).toBe('ok');
+      if (result.kind === 'ok') {
+        expect(result.files.application.oauth2PermissionScopes).toEqual([
+          {
+            id: '11111111-1111-1111-1111-111111111111',
+            value: 'access_as_user',
+            type: 'User',
+            adminConsentDisplayName: 'Access sample-web-app',
+            adminConsentDescription: 'Allows access on behalf of the user.',
+            userConsentDisplayName: 'Access sample-web-app',
+            userConsentDescription: 'Allows access on your behalf.',
+            isEnabled: false,
+          },
+        ]);
+      }
+    });
+
+    it('keeps an Admin type as given', () => {
+      const result = resolveApplicationSubmit(
+        formInput({
+          application: {
+            displayName: '',
+            signInAudience: 'AzureADMyOrg',
+            redirectUris: [],
+            requiredPermissions: [],
+            oauth2PermissionScopes: [
+              {
+                id: 'x',
+                idVariableName: '',
+                value: 'admin_scope',
+                type: 'Admin',
+                adminConsentDisplayName: '',
+                adminConsentDescription: '',
+                userConsentDisplayName: '',
+                userConsentDescription: '',
+                isEnabled: true,
+              },
+            ],
+          },
+        })
+      );
+      expect(result.kind).toBe('ok');
+      if (result.kind === 'ok') {
+        expect(result.files.application.oauth2PermissionScopes[0].type).toBe('Admin');
+      }
+    });
+
+    it('writes the id as an environment.Variables Jinja reference when an ID variable name is given', () => {
+      const result = resolveApplicationSubmit(
+        formInput({
+          application: {
+            displayName: '',
+            signInAudience: 'AzureADMyOrg',
+            redirectUris: [],
+            requiredPermissions: [],
+            oauth2PermissionScopes: [
+              {
+                id: '11111111-1111-1111-1111-111111111111',
+                idVariableName: '  MyNewPermissionVariableName  ',
+                value: 'access_as_user',
+                type: 'User',
+                adminConsentDisplayName: '',
+                adminConsentDescription: '',
+                userConsentDisplayName: '',
+                userConsentDescription: '',
+                isEnabled: true,
+              },
+            ],
+          },
+        })
+      );
+      expect(result.kind).toBe('ok');
+      if (result.kind === 'ok') {
+        expect(result.files.application.oauth2PermissionScopes[0].id).toBe(
+          '{{ environment.Variables.MyNewPermissionVariableName }}'
+        );
+      }
+    });
+
+    it('falls back to the row id unchanged when the ID variable name is blank', () => {
+      const result = resolveApplicationSubmit(
+        formInput({
+          application: {
+            displayName: '',
+            signInAudience: 'AzureADMyOrg',
+            redirectUris: [],
+            requiredPermissions: [],
+            oauth2PermissionScopes: [
+              {
+                id: '  11111111-1111-1111-1111-111111111111  ',
+                idVariableName: '   ',
+                value: 'access_as_user',
+                type: 'User',
+                adminConsentDisplayName: '',
+                adminConsentDescription: '',
+                userConsentDisplayName: '',
+                userConsentDescription: '',
+                isEnabled: true,
+              },
+            ],
+          },
+        })
+      );
+      expect(result.kind).toBe('ok');
+      if (result.kind === 'ok') {
+        expect(result.files.application.oauth2PermissionScopes[0].id).toBe('11111111-1111-1111-1111-111111111111');
+      }
+    });
+
+    function oauth2Scope(idVariableName: string) {
+      return {
+        id: 'fallback-id',
+        idVariableName,
+        value: 'access_as_user',
+        type: 'User' as const,
+        adminConsentDisplayName: '',
+        adminConsentDescription: '',
+        userConsentDisplayName: '',
+        userConsentDescription: '',
+        isEnabled: true,
+      };
+    }
+
+    it('generates a GUID for the ID variable name in every environment that is missing it', () => {
+      const result = resolveApplicationSubmit(
+        formInput({
+          environments: [env({ name: 'Dev' }), env({ name: 'Test', environment_code: 'test' })],
+          application: {
+            displayName: '',
+            signInAudience: 'AzureADMyOrg',
+            redirectUris: [],
+            requiredPermissions: [],
+            oauth2PermissionScopes: [oauth2Scope('MyNewPermissionVariableName')],
+          },
+        })
+      );
+      expect(result.kind).toBe('ok');
+      if (result.kind === 'ok') {
+        const guidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        for (const environment of result.files.appConfig.Environments) {
+          expect(environment.Variables.MyNewPermissionVariableName).toMatch(guidPattern);
+        }
+      }
+    });
+
+    it('does not overwrite an environment that already has a value for the ID variable name', () => {
+      const result = resolveApplicationSubmit(
+        formInput({
+          environments: [env({ name: 'Dev', variables: { MyNewPermissionVariableName: 'existing-value' } })],
+          application: {
+            displayName: '',
+            signInAudience: 'AzureADMyOrg',
+            redirectUris: [],
+            requiredPermissions: [],
+            oauth2PermissionScopes: [oauth2Scope('MyNewPermissionVariableName')],
+          },
+        })
+      );
+      expect(result.kind).toBe('ok');
+      if (result.kind === 'ok') {
+        expect(result.files.appConfig.Environments[0].Variables.MyNewPermissionVariableName).toBe('existing-value');
+      }
+    });
+
+    it('leaves every environment untouched when no scope has an ID variable name', () => {
+      const result = resolveApplicationSubmit(
+        formInput({
+          environments: [env({ name: 'Dev' })],
+          application: {
+            displayName: '',
+            signInAudience: 'AzureADMyOrg',
+            redirectUris: [],
+            requiredPermissions: [],
+            oauth2PermissionScopes: [oauth2Scope('')],
+          },
+        })
+      );
+      expect(result.kind).toBe('ok');
+      if (result.kind === 'ok') {
+        expect(result.files.appConfig.Environments[0].Variables).toEqual({});
+      }
+    });
+  });
+
+  describe('environments > Variables merging', () => {
+    it('merges the top-level shared Variables into every environment, mirroring the Variables: &DefaultVariables convention', () => {
+      const result = resolveApplicationSubmit(
+        formInput({
+          variables: [{ key: 'owner_email', value: 'team@example.com' }],
+          environments: [
+            { name: 'Dev', publisherDomain: '', tenancy_type: 'ciam', environment_code: 'dev', variables: {} },
+          ],
+        })
+      );
+      expect(result.kind).toBe('ok');
+      if (result.kind === 'ok') {
+        expect(result.files.appConfig.Environments[0].Variables).toEqual({ owner_email: 'team@example.com' });
+      }
+    });
+
+    it("lets an environment's own Variables override a shared default of the same key", () => {
+      const result = resolveApplicationSubmit(
+        formInput({
+          variables: [{ key: 'owner_email', value: 'team@example.com' }],
+          environments: [
+            {
+              name: 'Dev',
+              publisherDomain: '',
+              tenancy_type: 'ciam',
+              environment_code: 'dev',
+              variables: { owner_email: 'dev-team@example.com' },
+            },
+          ],
+        })
+      );
+      expect(result.kind).toBe('ok');
+      if (result.kind === 'ok') {
+        expect(result.files.appConfig.Environments[0].Variables).toEqual({ owner_email: 'dev-team@example.com' });
       }
     });
   });

@@ -9,7 +9,16 @@ const sampleFiles: ApplicationFiles = {
     business_unit: 'Customer Experience',
     Variables: { owner_email: 'team@example.com' },
     Environments: [
-      { name: 'Dev', publisherDomain: 'contoso-dev.onmicrosoft.com', tenancy_type: 'ciam', environment_code: 'dev' },
+      {
+        name: 'Dev',
+        publisherDomain: 'contoso-dev.onmicrosoft.com',
+        tenancy_type: 'ciam',
+        environment_code: 'dev',
+        // Matches what ApplicationFiles looks like in practice: resolveApplicationSubmit's
+        // mergeDefaultVariablesIntoEnvironments always copies the shared Variables above into
+        // every environment before this shape is produced — see buildAppConfigNode's doc comment.
+        Variables: { owner_email: 'team@example.com' },
+      },
     ],
     Dependencies: {},
   },
@@ -19,6 +28,18 @@ const sampleFiles: ApplicationFiles = {
     redirectUris: ['https://dev.example.com/signin-oidc'],
     requiredPermissions: [
       { resourceAppId: '00000003-0000-0000-c000-000000000000', id: 'e1fe6dd8-ba31-4d61-89e7-88639da4683d', type: 'Scope' },
+    ],
+    oauth2PermissionScopes: [
+      {
+        id: '11111111-1111-1111-1111-111111111111',
+        value: 'access_as_user',
+        type: 'User',
+        adminConsentDisplayName: 'Access sample-web-app',
+        adminConsentDescription: 'Allows the app to access sample-web-app on behalf of the signed-in user.',
+        userConsentDisplayName: 'Access sample-web-app',
+        userConsentDescription: 'Allows the app to access sample-web-app on your behalf.',
+        isEnabled: true,
+      },
     ],
   },
   federatedCredentials: [
@@ -40,7 +61,7 @@ const sampleFiles: ApplicationFiles = {
 describe('buildApplicationDocumentText', () => {
   it('builds one YAML document with a top-level key per file', () => {
     const text = buildApplicationDocumentText(sampleFiles);
-    const parsed = YAML.parse(text);
+    const parsed = YAML.parse(text, { merge: true });
 
     expect(Object.keys(parsed)).toEqual(['AppConfig', 'Application', 'FederatedCredentials', 'ServicePrincipal']);
     expect(parsed.AppConfig).toEqual(sampleFiles.appConfig);
@@ -49,7 +70,7 @@ describe('buildApplicationDocumentText', () => {
 
   it('serializes Application in the exact Graph JSON shape (grouped requiredResourceAccess, omitted empty sections)', () => {
     const text = buildApplicationDocumentText(sampleFiles);
-    const parsed = YAML.parse(text);
+    const parsed = YAML.parse(text, { merge: true });
 
     expect(parsed.Application).toEqual({
       displayName: 'Sample Web App (Dev)',
@@ -61,12 +82,26 @@ describe('buildApplicationDocumentText', () => {
           resourceAccess: [{ id: 'e1fe6dd8-ba31-4d61-89e7-88639da4683d', type: 'Scope' }],
         },
       ],
+      api: {
+        oauth2PermissionScopes: [
+          {
+            id: '11111111-1111-1111-1111-111111111111',
+            adminConsentDescription: 'Allows the app to access sample-web-app on behalf of the signed-in user.',
+            adminConsentDisplayName: 'Access sample-web-app',
+            isEnabled: true,
+            type: 'User',
+            userConsentDescription: 'Allows the app to access sample-web-app on your behalf.',
+            userConsentDisplayName: 'Access sample-web-app',
+            value: 'access_as_user',
+          },
+        ],
+      },
     });
   });
 
   it('serializes ServicePrincipal in the exact Graph JSON shape', () => {
     const text = buildApplicationDocumentText(sampleFiles);
-    const parsed = YAML.parse(text);
+    const parsed = YAML.parse(text, { merge: true });
 
     expect(parsed.ServicePrincipal).toEqual({
       appId: '{{ application.appId }}',
@@ -83,7 +118,7 @@ describe('buildApplicationDocumentText', () => {
       servicePrincipal: emptyServicePrincipalFields(),
     };
     const text = buildApplicationDocumentText(bareFiles);
-    const parsed = YAML.parse(text);
+    const parsed = YAML.parse(text, { merge: true });
 
     expect(parsed.Application).toEqual({ displayName: '', signInAudience: 'AzureADMyOrg' });
     expect(parsed.ServicePrincipal).toEqual({ appId: '', appRoleAssignmentRequired: false });

@@ -222,6 +222,48 @@ These came out of an explicit planning pass with the user and should not be sile
   plain text with a ⚠ warning icon instead of the dropdown, so a hand-edited value, a reference to a
   since-renamed/removed dependency, or an unmodelled third-party GUID is never silently discarded or
   misrepresented; a freshly added row always starts as a working dropdown.
+  A dynamic **Exposed API scopes** list mirrors Required Permissions in reverse: it edits
+  `Application.yaml.j2`'s `api.oauth2PermissionScopes` (`Oauth2PermissionScopeEntry` in `types.ts`,
+  fields matching Graph's `permissionScope` type exactly, one row per scope, no
+  flatten/regroup needed since it's already a flat Graph array) — delegated scopes this application
+  *exposes*, rather than what it requests. Each row's Graph-required `id` (a GUID Graph uses to
+  match a scope across updates) is generated automatically for a new/id-less row
+  (`applicationEditorHtml.ts`'s `oauth2PermissionScopeRowsHtml()`/`addOauth2ScopeRow()`, via
+  `crypto.randomUUID()`) and otherwise left alone — unless the row's optional **ID variable name**
+  field is filled in, in which case `resolveOauth2PermissionScopes()` in `applicationFormLogic.ts`
+  writes the id as `{{ environment.Variables.<name> }}` instead
+  (`oauth2ScopeIdReference.ts`'s `buildEnvironmentVariableIdReference()`/`parseEnvironmentVariableIdName()`,
+  the same templating idea `dependency_refs` already uses) — clearing that field back to blank falls
+  back to the row's last raw id rather than writing a broken reference to an empty name. Whenever
+  any scope resolves to such a reference, `resolveApplicationSubmit()` calls
+  `ensureOauth2ScopeIdVariablesInEnvironments()` to guarantee that variable name is a key in *every*
+  environment's own `Variables` map (see `EnvironmentEntry.Variables` below), generating a fresh GUID
+  for any environment that doesn't already have one — never overwriting one that does.
+  `EnvironmentEntry` (`types.ts`) grew a `Variables: Record<string, string>` field for exactly this —
+  each environment's own values, distinct from `AppConfig.yaml`'s shared top-level `Variables` — with
+  no dedicated add/remove-row UI of its own yet (round-tripped via a hidden, JSON-encoded field per
+  Environment row in `applicationEditorHtml.ts`, carried through unedited by that row's own UI).
+  `resolveApplicationSubmit()`'s `mergeDefaultVariablesIntoEnvironments()` always copies the shared
+  top-level `Variables` into every environment's own map (environment-specific values win on a key
+  clash) before the id-variable-name pass runs, so `EnvironmentEntry.Variables` in memory always
+  holds each environment's *full effective* set — this mirrors, and is meant to have the same
+  practical effect as, hand-authoring `Variables: &DefaultVariables` plus per-environment
+  `<<: *DefaultVariables` (UC040's own convention, restored on user request after an earlier version
+  of this merge just wrote flattened literal values and lost the anchor/alias syntax entirely). The
+  actual anchor/alias *is* reconstructed on disk: `types.ts`'s `buildAppConfigNode()` builds
+  `AppConfig.yaml`'s node via the `yaml` package's `Document`/`Node` API (not a plain-object
+  `YAML.stringify()`, which has no way to express an alias) — it anchors the shared `Variables` node
+  once (`&DefaultVariables`) and, for each environment, writes only that environment's *overrides*
+  (a key that's new or has a different value than the shared default) alongside a `<<` alias
+  pointing at the anchor, so a human reading the file sees the same shape as if they'd hand-authored
+  it. Both `ApplicationStore` and `applicationDocumentContent.ts`'s combined virtual document use
+  `buildAppConfigNode()` for writing `AppConfig.yaml`, and both parse it back with `{ merge: true }`
+  (a `yaml` package option, off by default) so the merge key actually resolves into each
+  environment's full effective set again instead of parsing as a literal, useless `"<<"` key —
+  `types.ts`'s `asVariablesRecord()` additionally guards against exactly that literal-`<<`-key case
+  (an object-shaped Variables value) by skipping it rather than `String()`-coercing it into
+  `"[object Object]"`, a real corruption this schema hit in practice before merge-key parsing was
+  turned on everywhere it needed to be.
   `FederatedCredentials.yaml.j2` is a dynamic list of `name`/`issuer`/`subject`/`description` fields
   per credential, with `audiences` (a Graph list, but almost always single-valued) edited as one
   comma-separated text field, split/joined programmatically rather than as a nested list-of-lists.
@@ -255,14 +297,23 @@ These came out of an explicit planning pass with the user and should not be sile
   renamed/deleted) is still rendered as a selectable option so re-saving the form doesn't silently
   drop it. Saving parses-to-object-then-restringifies all four files fresh (`applicationStore.ts`, same
   approach as `connectionStore.ts`), so — documented in UC042, not silently accepted — it drops any
-  hand-written comment in any of the four files, the `Variables: &DefaultVariables`-style anchor (or
-  any other YAML anchor/alias), an environment's extra keys beyond the four fixed ones this form
-  exposes, and any `Application`/`FederatedCredentials`/`ServicePrincipal` key this form doesn't
-  model (e.g. `identifierUris`, `appRoles`, `implicitGrantSettings` — already removed from
+  hand-written comment in any of the four files, an environment's extra keys beyond the fixed ones
+  this form exposes, and any `Application`/`FederatedCredentials`/`ServicePrincipal` key this form
+  doesn't model (e.g. `identifierUris`, `appRoles`, `implicitGrantSettings` — already removed from
   `Example_Project`'s sample data for this reason). This is an explicit, accepted tradeoff: the user
   directed it, on the basis that a developer reviews the `git diff` this form produces before
   committing and can re-add anything dropped. Don't "fix" that by inventing a merge/preserve step
-  without deciding it's worth the complexity; it was a deliberate scope call, not an oversight.
+  without deciding it's worth the complexity; it was a deliberate scope call, not an oversight. The
+  one exception, built deliberately (not a gap in the above): `AppConfig.yaml`'s own
+  `Variables: &DefaultVariables` / per-environment `<<: *DefaultVariables` merge key *is*
+  reconstructed on every save, via `types.ts`'s `buildAppConfigNode()` — see its own doc comment for
+  how (it uses the `yaml` package's `Document`/`Node` API, not a plain-object `YAML.stringify()`,
+  which has no way to express an alias) and `EnvironmentEntry.Variables`'s doc comment for how the
+  in-memory shape (always each environment's full, already-merged effective set) differs from what's
+  actually written to disk (each environment's overrides only, aliasing the rest). This requires
+  `{ merge: true }` wherever this schema is parsed back (`ApplicationStore`/
+  `applicationDocumentContent.ts`) — without it, `<<` parses as a literal, useless map key instead
+  of resolving.
 - **One tree, two roots**: the extension exposes a single tree control with exactly two top-level
   nodes — **Connections** and **Project** — not two separate views. Both roots are meant to expand
   through the same shape (artifact-category folder → artifact-detail item); today that shape is

@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
-import { ApplicationFiles, AppConfig, RequiredPermission, FederatedCredentialEntry } from './types';
+import { ApplicationFiles, AppConfig, RequiredPermission, Oauth2PermissionScopeEntry, FederatedCredentialEntry } from './types';
 import { MICROSOFT_GRAPH_APP_ID, parseResourceAppId, buildDependencyReference } from './resourceAppIdReference';
+import { parseEnvironmentVariableIdName } from './oauth2ScopeIdReference';
 
 function getNonce(): string {
   return crypto.randomBytes(16).toString('base64');
@@ -31,10 +32,18 @@ function variableRowsHtml(appConfig: AppConfig): string {
     .join('');
 }
 
+/**
+ * `env.Variables` (see EnvironmentEntry's doc comment — distinct from AppConfig's own top-level
+ * `Variables`) has no dedicated editing UI of its own yet, so it's round-tripped here as a hidden,
+ * JSON-encoded field rather than dropped: unedited by this row, but preserved on save (and
+ * added to by `ensureOauth2ScopeIdVariablesInEnvironments` in applicationFormLogic.ts) rather than
+ * silently lost every time this form is saved.
+ */
 function environmentRowsHtml(appConfig: AppConfig): string {
   return appConfig.Environments.map(
     (env) => `
     <div class="row environment-row">
+      <input type="hidden" class="env-variables" value="${escapeHtml(JSON.stringify(env.Variables))}" />
       <input type="text" class="env-name" placeholder="Name (e.g. Dev)" value="${escapeHtml(env.name)}" />
       <input type="text" class="env-publisherDomain" placeholder="Publisher domain" value="${escapeHtml(env.publisherDomain)}" />
       <select class="env-tenancy_type">
@@ -135,6 +144,43 @@ function requiredPermissionRowsHtml(rows: readonly RequiredPermission[], depende
     .join('');
 }
 
+/**
+ * `scope.id` is generated here (not left blank) if a loaded entry didn't already have one — e.g. a
+ * hand-authored `Application.yaml.j2` that omitted it — so the row always has a stable fallback id
+ * to submit from its first render onward, without normalizeApplicationFields() itself needing to
+ * mutate/invent data on every parse (see Oauth2PermissionScopeEntry's doc comment on why the id
+ * must stay stable once a scope has been deployed). That fallback is only ever used if the row's
+ * "ID variable name" field (see oauth2ScopeIdReference.ts) is left blank — filling it in makes the
+ * id a `{{ environment.Variables.<name> }}` reference instead, resolved once deploy tooling exists.
+ */
+function oauth2PermissionScopeRowsHtml(scopes: readonly Oauth2PermissionScopeEntry[]): string {
+  return scopes
+    .map((scope) => {
+      const id = scope.id || crypto.randomUUID();
+      const idVariableName = parseEnvironmentVariableIdName(scope.id) ?? '';
+      return `
+    <div class="row oauth2-scope-row oauth2-scope-row-grid">
+      <input type="hidden" class="oauth2-scope-id" value="${escapeHtml(id)}" />
+      <input type="text" class="oauth2-scope-value" placeholder="Scope value (e.g. Files.Read)" value="${escapeHtml(scope.value)}" />
+      <input type="text" class="oauth2-scope-idVariableName" placeholder="ID variable name (optional, e.g. MyScopeId)" value="${escapeHtml(idVariableName)}" title="If set, the scope's ID is written as {{ environment.Variables.<this> }} instead of a fixed GUID." />
+      <select class="oauth2-scope-type">
+        <option value="User" ${selectedAttr(scope.type, 'User')}>User (delegated)</option>
+        <option value="Admin" ${selectedAttr(scope.type, 'Admin')}>Admin only</option>
+      </select>
+      <label class="oauth2-scope-enabled-label">
+        <input type="checkbox" class="oauth2-scope-isEnabled" ${scope.isEnabled ? 'checked' : ''} />
+        Enabled
+      </label>
+      <input type="text" class="oauth2-scope-adminConsentDisplayName" placeholder="Admin consent display name" value="${escapeHtml(scope.adminConsentDisplayName)}" />
+      <input type="text" class="oauth2-scope-adminConsentDescription" placeholder="Admin consent description" value="${escapeHtml(scope.adminConsentDescription)}" />
+      <input type="text" class="oauth2-scope-userConsentDisplayName" placeholder="User consent display name" value="${escapeHtml(scope.userConsentDisplayName)}" />
+      <input type="text" class="oauth2-scope-userConsentDescription" placeholder="User consent description" value="${escapeHtml(scope.userConsentDescription)}" />
+      <button type="button" class="remove-row-btn" aria-label="Remove">✕</button>
+    </div>`;
+    })
+    .join('');
+}
+
 function federatedCredentialRowsHtml(entries: readonly FederatedCredentialEntry[]): string {
   return entries
     .map(
@@ -223,6 +269,17 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
   .row input, .row select { flex: 1; min-width: 0; }
   .fedcred-row-grid { flex-wrap: wrap; }
   .fedcred-row-grid input { flex: 1 1 30%; }
+  .oauth2-scope-row-grid { flex-wrap: wrap; }
+  .oauth2-scope-row-grid input[type="text"], .oauth2-scope-row-grid select { flex: 1 1 30%; }
+  .oauth2-scope-enabled-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 0 0 auto;
+    font-size: 0.9em;
+    color: var(--vscode-descriptionForeground);
+  }
+  .oauth2-scope-enabled-label input { width: auto; }
   .perm-resourceAppId-wrap { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; }
   .warning-icon {
     flex: 0 0 auto;
@@ -331,6 +388,11 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
     <div id="permissionRows">${requiredPermissionRowsHtml(application.requiredPermissions, Object.keys(appConfig.Dependencies))}</div>
     <button type="button" class="add-row-btn" id="addPermissionBtn">+ Add permission</button>
 
+    <h3>Exposed API scopes (oauth2PermissionScopes)</h3>
+    <div class="hint">Delegated permission scopes this application exposes for other applications to request — Graph's <code>api.oauth2PermissionScopes</code>. Each scope's ID is generated automatically and kept stable across saves, so a previously deployed scope is updated in place rather than replaced — or give it an <strong>ID variable name</strong> to write the ID as <code>{{ environment.Variables.&lt;name&gt; }}</code> instead, resolved per environment once deploy tooling exists.</div>
+    <div id="oauth2ScopeRows">${oauth2PermissionScopeRowsHtml(application.oauth2PermissionScopes)}</div>
+    <button type="button" class="add-row-btn" id="addOauth2ScopeBtn">+ Add scope</button>
+
     <h2>Federated Credentials</h2>
     <div class="hint">FederatedCredentials.yaml.j2 — one row per credential.</div>
     <div id="fedcredRows">${federatedCredentialRowsHtml(federatedCredentials)}</div>
@@ -384,6 +446,7 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
     const MICROSOFT_GRAPH_APP_ID = ${microsoftGraphAppIdJson};
     const redirectUriRows = document.getElementById('redirectUriRows');
     const permissionRows = document.getElementById('permissionRows');
+    const oauth2ScopeRows = document.getElementById('oauth2ScopeRows');
     const fedcredRows = document.getElementById('fedcredRows');
     const tagRows = document.getElementById('tagRows');
     const tagsError = document.getElementById('tagsError');
@@ -445,7 +508,8 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
       appendRow(
         environmentRows,
         'row environment-row',
-        '<input type="text" class="env-name" placeholder="Name (e.g. Dev)" />' +
+        '<input type="hidden" class="env-variables" value="{}" />' +
+          '<input type="text" class="env-name" placeholder="Name (e.g. Dev)" />' +
           '<input type="text" class="env-publisherDomain" placeholder="Publisher domain" />' +
           '<select class="env-tenancy_type">' +
           '<option value="workforce">Workforce</option>' +
@@ -554,6 +618,29 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
       );
     }
 
+    function addOauth2ScopeRow() {
+      appendRow(
+        oauth2ScopeRows,
+        'row oauth2-scope-row oauth2-scope-row-grid',
+        '<input type="hidden" class="oauth2-scope-id" value="' + crypto.randomUUID() + '" />' +
+          '<input type="text" class="oauth2-scope-value" placeholder="Scope value (e.g. Files.Read)" />' +
+          '<input type="text" class="oauth2-scope-idVariableName" placeholder="ID variable name (optional, e.g. MyScopeId)" title="If set, the scope\\'s ID is written as {{ environment.Variables.<this> }} instead of a fixed GUID." />' +
+          '<select class="oauth2-scope-type">' +
+          '<option value="User">User (delegated)</option>' +
+          '<option value="Admin">Admin only</option>' +
+          '</select>' +
+          '<label class="oauth2-scope-enabled-label">' +
+          '<input type="checkbox" class="oauth2-scope-isEnabled" checked />' +
+          'Enabled' +
+          '</label>' +
+          '<input type="text" class="oauth2-scope-adminConsentDisplayName" placeholder="Admin consent display name" />' +
+          '<input type="text" class="oauth2-scope-adminConsentDescription" placeholder="Admin consent description" />' +
+          '<input type="text" class="oauth2-scope-userConsentDisplayName" placeholder="User consent display name" />' +
+          '<input type="text" class="oauth2-scope-userConsentDescription" placeholder="User consent description" />' +
+          '<button type="button" class="remove-row-btn" aria-label="Remove">✕</button>'
+      );
+    }
+
     function addFedCredRow() {
       appendRow(
         fedcredRows,
@@ -584,6 +671,7 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
     document.getElementById('addDependencyBtn').addEventListener('click', addDependencyRow);
     document.getElementById('addRedirectUriBtn').addEventListener('click', addRedirectUriRow);
     document.getElementById('addPermissionBtn').addEventListener('click', addPermissionRow);
+    document.getElementById('addOauth2ScopeBtn').addEventListener('click', addOauth2ScopeRow);
     document.getElementById('addFedCredBtn').addEventListener('click', addFedCredRow);
     document.getElementById('addTagBtn').addEventListener('click', addTagRow);
     document.getElementById('cancelBtn').addEventListener('click', function () {
@@ -613,11 +701,18 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
         };
       });
       const environments = Array.from(document.querySelectorAll('.environment-row')).map(function (row) {
+        let variables = {};
+        try {
+          variables = JSON.parse(row.querySelector('.env-variables').value || '{}');
+        } catch (e) {
+          variables = {};
+        }
         return {
           name: row.querySelector('.env-name').value,
           publisherDomain: row.querySelector('.env-publisherDomain').value,
           tenancy_type: row.querySelector('.env-tenancy_type').value,
           environment_code: row.querySelector('.env-environment_code').value,
+          variables: variables,
         };
       });
       const dependencies = Array.from(document.querySelectorAll('.dependency-row')).map(function (row) {
@@ -631,6 +726,19 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
           resourceAppId: row.querySelector('.perm-resourceAppId').value,
           id: row.querySelector('.perm-id').value,
           type: row.querySelector('.perm-type').value,
+        };
+      });
+      const oauth2PermissionScopes = Array.from(document.querySelectorAll('.oauth2-scope-row')).map(function (row) {
+        return {
+          id: row.querySelector('.oauth2-scope-id').value,
+          idVariableName: row.querySelector('.oauth2-scope-idVariableName').value,
+          value: row.querySelector('.oauth2-scope-value').value,
+          type: row.querySelector('.oauth2-scope-type').value,
+          isEnabled: row.querySelector('.oauth2-scope-isEnabled').checked,
+          adminConsentDisplayName: row.querySelector('.oauth2-scope-adminConsentDisplayName').value,
+          adminConsentDescription: row.querySelector('.oauth2-scope-adminConsentDescription').value,
+          userConsentDisplayName: row.querySelector('.oauth2-scope-userConsentDisplayName').value,
+          userConsentDescription: row.querySelector('.oauth2-scope-userConsentDescription').value,
         };
       });
       const federatedCredentials = Array.from(document.querySelectorAll('.fedcred-row')).map(function (row) {
@@ -654,6 +762,7 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
           signInAudience: document.getElementById('signInAudience').value,
           redirectUris: collectStringList(redirectUriRows, 'redirecturi-value'),
           requiredPermissions: requiredPermissions,
+          oauth2PermissionScopes: oauth2PermissionScopes,
         },
         federatedCredentials: federatedCredentials,
         servicePrincipal: {

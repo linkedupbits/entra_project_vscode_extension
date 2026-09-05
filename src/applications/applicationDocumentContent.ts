@@ -7,25 +7,32 @@ import {
   normalizeServicePrincipalFields,
   serializeApplication,
   serializeServicePrincipal,
+  buildAppConfigNode,
 } from './types';
 
 /**
  * Builds the combined, editable YAML text for a project application's virtual document (see
  * `applicationDocumentUri.ts`) — one YAML document with a top-level key per one of UC040's four
  * files, each holding exactly the same shape `ApplicationStore` reads/writes for that file, so
- * this document's text matches what a developer would see opening the four real files directly.
+ * this document's text matches what a developer would see opening the four real files directly —
+ * `AppConfig`'s own `Variables: &DefaultVariables` / per-environment `<<: *DefaultVariables` merge
+ * key included, via the same `buildAppConfigNode()` `ApplicationStore` uses (see its doc comment in
+ * `types.ts`); the anchor/alias belong to this document specifically since anchors only resolve
+ * within one YAML document.
  *
- * Round-tripping through this text and back accepts the same comment/anchor/unmodelled-field loss
- * UC042's structured editor already does, for the same reason (see UC042's Postconditions) — this
- * is a second editing surface over the same on-disk format, not a new one with different rules.
+ * Round-tripping through this text and back accepts the same comment/unmodelled-field loss UC042's
+ * structured editor already does, for the same reason (see UC042's Postconditions) — this is a
+ * second editing surface over the same on-disk format, not a new one with different rules.
  */
 export function buildApplicationDocumentText(files: ApplicationFiles): string {
-  return YAML.stringify({
-    AppConfig: files.appConfig,
-    Application: serializeApplication(files.application),
-    FederatedCredentials: files.federatedCredentials,
-    ServicePrincipal: serializeServicePrincipal(files.servicePrincipal),
-  });
+  const doc = new YAML.Document();
+  const map = new YAML.YAMLMap();
+  map.items.push(doc.createPair('AppConfig', buildAppConfigNode(doc, files.appConfig)));
+  map.items.push(doc.createPair('Application', serializeApplication(files.application)));
+  map.items.push(doc.createPair('FederatedCredentials', files.federatedCredentials));
+  map.items.push(doc.createPair('ServicePrincipal', serializeServicePrincipal(files.servicePrincipal)));
+  doc.contents = map;
+  return doc.toString();
 }
 
 export type ParseApplicationDocumentResult = { kind: 'ok'; files: ApplicationFiles } | { kind: 'error'; message: string };
@@ -40,7 +47,7 @@ export type ParseApplicationDocumentResult = { kind: 'ok'; files: ApplicationFil
 export function parseApplicationDocumentText(text: string): ParseApplicationDocumentResult {
   let parsed: unknown;
   try {
-    parsed = YAML.parse(text);
+    parsed = YAML.parse(text, { merge: true });
   } catch (err) {
     return { kind: 'error', message: err instanceof Error ? err.message : String(err) };
   }

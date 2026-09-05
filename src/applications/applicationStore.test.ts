@@ -12,7 +12,14 @@ const sampleAppConfig: AppConfig = {
   business_unit: 'Customer Experience',
   Variables: { owner_email: 'team@example.com' },
   Environments: [
-    { name: 'Dev', publisherDomain: 'contoso-dev.onmicrosoft.com', tenancy_type: 'ciam', environment_code: 'dev' },
+    {
+      name: 'Dev',
+      publisherDomain: 'contoso-dev.onmicrosoft.com',
+      tenancy_type: 'ciam',
+      environment_code: 'dev',
+      // Matches what ApplicationFiles looks like in practice — see buildAppConfigNode's doc comment.
+      Variables: { owner_email: 'team@example.com' },
+    },
   ],
   Dependencies: { SampleAPIApp: { AppName: 'sample-api' } },
 };
@@ -26,6 +33,7 @@ const sampleFiles: ApplicationFiles = {
     requiredPermissions: [
       { resourceAppId: '00000003-0000-0000-c000-000000000000', id: 'e1fe6dd8-ba31-4d61-89e7-88639da4683d', type: 'Scope' },
     ],
+    oauth2PermissionScopes: [],
   },
   federatedCredentials: [
     {
@@ -65,6 +73,7 @@ describe('ApplicationStore.load', () => {
       signInAudience: 'AzureADMyOrg',
       redirectUris: [],
       requiredPermissions: [],
+      oauth2PermissionScopes: [],
     });
     expect(files.federatedCredentials).toEqual([]);
     expect(files.servicePrincipal).toEqual({ appId: '', appRoleAssignmentRequired: false, tags: [] });
@@ -127,7 +136,9 @@ describe('ApplicationStore.save', () => {
       ])
     );
 
-    expect(YAML.parse(writes.get('/repo/entra/applications/sample-web-app/AppConfig.yaml')!)).toEqual(sampleAppConfig);
+    expect(
+      YAML.parse(writes.get('/repo/entra/applications/sample-web-app/AppConfig.yaml')!, { merge: true })
+    ).toEqual(sampleAppConfig);
 
     expect(YAML.parse(writes.get('/repo/entra/applications/sample-web-app/Application.yaml.j2')!)).toEqual({
       displayName: 'Sample Web App (Dev)',
@@ -155,7 +166,13 @@ describe('ApplicationStore.save', () => {
   it('omits web and requiredResourceAccess entirely when there is nothing to put in them', async () => {
     await new ApplicationStore().save(folderUri as never, {
       ...sampleFiles,
-      application: { displayName: 'Bare', signInAudience: 'AzureADMyOrg', redirectUris: [], requiredPermissions: [] },
+      application: {
+        displayName: 'Bare',
+        signInAudience: 'AzureADMyOrg',
+        redirectUris: [],
+        requiredPermissions: [],
+        oauth2PermissionScopes: [],
+      },
     });
 
     const [, bytes] = vi
@@ -178,6 +195,7 @@ describe('ApplicationStore.save', () => {
           { resourceAppId: 'graph', id: 'perm-b', type: 'Role' },
           { resourceAppId: 'other-api', id: 'perm-c', type: 'Scope' },
         ],
+        oauth2PermissionScopes: [],
       },
     });
 
