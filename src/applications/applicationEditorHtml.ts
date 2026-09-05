@@ -772,6 +772,23 @@ export function getHtml(
       });
     }
 
+    // Mirrors applicationEditorHtml.ts's fedcredSummaryLabel() — duplicated here for the same
+    // reason as the other server/client pairs in this script.
+    function fedcredSummaryLabel(name, subject) {
+      var text = name || '(unnamed)';
+      return subject ? text + ' — ' + subject : text;
+    }
+
+    // Keeps each federated credential card's collapsed-state summary in sync with its own Name/
+    // Subject fields, so a specific credential stays identifiable without expanding it.
+    function refreshFedCredSummaries() {
+      document.querySelectorAll('.fedcred-card').forEach(function (card) {
+        var name = card.querySelector('.fedcred-name').value;
+        var subject = card.querySelector('.fedcred-subject').value;
+        card.querySelector('.fedcred-summary-label').textContent = fedcredSummaryLabel(name, subject);
+      });
+    }
+
     // Mirrors applicationEditorHtml.ts's permissionIdFieldHtml() — duplicated here for the same
     // reason as the other server/client pairs in this script: it can't import that TS module.
     function permissionIdCellHtml(resourceAppId, permissionId) {
@@ -889,16 +906,34 @@ export function getHtml(
     }
 
     function addFedCredRow() {
-      appendRow(
+      // Starts expanded (a loaded credential starts collapsed) — same reasoning as addOauth2ScopeRow.
+      const row = appendRow(
         fedcredRows,
-        'row fedcred-row fedcred-row-grid',
-        '<input type="text" class="fedcred-name" placeholder="Name" />' +
-          '<input type="text" class="fedcred-issuer" placeholder="Issuer" />' +
-          '<input type="text" class="fedcred-subject" placeholder="Subject" />' +
-          '<input type="text" class="fedcred-audiences" placeholder="Audiences (comma-separated)" />' +
-          '<input type="text" class="fedcred-description" placeholder="Description" />' +
-          '<button type="button" class="remove-row-btn" aria-label="Remove">✕</button>'
+        'fedcred-card',
+        '<summary class="fedcred-summary">' +
+          '<span class="fedcred-summary-label">(unnamed)</span>' +
+          '<button type="button" class="remove-row-btn" aria-label="Remove">✕</button>' +
+          '</summary>' +
+          '<div class="fedcred-body">' +
+          '<label>Name' +
+          '<input type="text" class="fedcred-name" />' +
+          '</label>' +
+          '<label>Issuer' +
+          '<input type="text" class="fedcred-issuer" />' +
+          '</label>' +
+          '<label>Subject' +
+          '<input type="text" class="fedcred-subject" />' +
+          '</label>' +
+          '<label>Audiences (comma-separated)' +
+          '<input type="text" class="fedcred-audiences" />' +
+          '</label>' +
+          '<label>Description' +
+          '<input type="text" class="fedcred-description" />' +
+          '</label>' +
+          '</div>',
+        'details'
       );
+      row.open = true;
     }
 
     function addTagRow() {
@@ -1027,11 +1062,13 @@ export function getHtml(
     // document is marked dirty (VS Code's native "unsaved changes" tab indicator) as soon as
     // anything differs from what's on disk — not only when Save is explicitly clicked. Also keeps
     // the Required Permissions dropdowns in sync with the current Dependencies rows, and each
-    // Exposed API scope card's collapsed summary in sync with its own fields, before the snapshot
-    // below is taken (see refreshPermissionResourceAppIdOptions/refreshOauth2ScopeSummaries).
+    // Exposed API scope / federated credential card's collapsed summary in sync with its own
+    // fields, before the snapshot below is taken (see refreshPermissionResourceAppIdOptions/
+    // refreshOauth2ScopeSummaries/refreshFedCredSummaries).
     function notifyEdit() {
       refreshPermissionResourceAppIdOptions();
       refreshOauth2ScopeSummaries();
+      refreshFedCredSummaries();
       vscode.postMessage({ type: 'edit', input: buildInputSnapshot() });
     }
     // A Permission ID's options depend on its row's Resource App ID, and picking a known Permission

@@ -15,9 +15,10 @@ import {
  * string of hand-written JS that TypeScript/ESLint/esbuild all wave through: a runtime error early
  * in its IIFE silently halts the rest of its setup, so a small mistake (e.g. a selector that
  * doesn't match a row type and hands a helper `null`) can break every button on the form while
- * every other check stays green. This smoke test runs that script against a minimal DOM stub, with
- * one of every kind of dynamic entry present, and asserts it neither throws nor skips wiring up the
- * "+ Add …" buttons.
+ * every other check stays green. These smoke tests run that script against a minimal DOM stub,
+ * with one of every kind of dynamic entry present, and assert it (a) neither throws nor skips
+ * wiring the "+ Add …" buttons and (b) each "+ Add …" button appends markup of the shape the rest
+ * of the script (e.g. `buildInputSnapshot`) expects.
  */
 
 const populatedFiles: ApplicationFiles = {
@@ -76,7 +77,7 @@ function extractScript(html: string): string {
 }
 
 function makeEl(): any {
-  return {
+  const el: any = {
     className: '',
     innerHTML: '',
     value: '',
@@ -85,36 +86,54 @@ function makeEl(): any {
     open: false,
     dataset: {},
     selectedOptions: [],
+    _appended: [] as any[],
     addEventListener: () => {},
     setAttribute: () => {},
     getAttribute: () => null,
     querySelector: () => makeEl(),
     querySelectorAll: () => [],
     closest: () => makeEl(),
-    appendChild: () => {},
+    appendChild: (c: any) => el._appended.push(c),
     remove: () => {},
     classList: { contains: () => false, add: () => {}, remove: () => {} },
   };
+  return el;
 }
 
-function runScriptWithStubDom(scriptBody: string): { threw: unknown; wiredAddButtons: string[] } {
+interface StubRun {
+  threw: unknown;
+  wiredAddButtons: string[];
+  clickHandlers: Record<string, () => void>;
+  containers: Record<string, any>;
+}
+
+/**
+ * Runs the webview script against a stub DOM. `afterRun`, if given, executes while that stub DOM
+ * is still installed (e.g. to fire a captured "+ Add" click handler, which itself touches
+ * `document`); its own throw is captured into the returned `threw` just like the script's.
+ */
+function runScriptWithStubDom(scriptBody: string, afterRun?: (run: StubRun) => void): StubRun {
   const wired = new Set<string>();
+  const clickHandlers: Record<string, () => void> = {};
+  const containers: Record<string, any> = {};
   const doc: any = {
     getElementById: (id: string) => {
       const el = makeEl();
       if (id.startsWith('add') && id.endsWith('Btn')) {
-        el.addEventListener = (type: string) => {
+        el.addEventListener = (type: string, fn: () => void) => {
           if (type === 'click') {
             wired.add(id);
+            clickHandlers[id] = fn;
           }
         };
       }
-      return el;
+      if (id.endsWith('Rows')) {
+        containers[id] = el;
+      }
+      return containers[id] ?? el;
     },
     querySelectorAll: (sel: string) => {
       if (sel === '.remove-row-btn') {
-        // One existing remove button of each container kind — the scope/fedcred ones are the case
-        // that regressed (a <details> card, not a `.row`).
         return [
           { closest: (s: string) => (s.includes('oauth2-scope-card') ? makeEl() : null) },
           { closest: (s: string) => (s.includes('fedcred-card') ? makeEl() : null) },
@@ -135,17 +154,19 @@ function runScriptWithStubDom(scriptBody: string): { threw: unknown; wiredAddBut
   if (!g.crypto) {
     g.crypto = { randomUUID: () => 'stub-uuid' };
   }
-  let threw: unknown = null;
+  const run: StubRun = { threw: null, wiredAddButtons: [], clickHandlers, containers };
   try {
     new Function(scriptBody)();
+    run.wiredAddButtons = [...wired].sort();
+    afterRun?.(run);
   } catch (e) {
-    threw = e;
+    run.threw = e;
   } finally {
     g.document = priorDocument;
     g.window = priorWindow;
     g.acquireVsCodeApi = priorAcquire;
   }
-  return { threw, wiredAddButtons: [...wired].sort() };
+  return run;
 }
 
 const ADD_BUTTON_IDS = [
@@ -158,6 +179,19 @@ const ADD_BUTTON_IDS = [
   'addTagBtn',
   'addVariableBtn',
 ].sort();
+
+// Which container each "+ Add" button appends into, and a class its buildInputSnapshot selector
+// (or the initial-render markup) requires the appended element to carry.
+const ADD_BUTTON_EXPECTATIONS: Record<string, { container: string; requiredClass: string }> = {
+  addVariableBtn: { container: 'variableRows', requiredClass: 'variable-row' },
+  addEnvironmentBtn: { container: 'environmentRows', requiredClass: 'environment-row' },
+  addDependencyBtn: { container: 'dependencyRows', requiredClass: 'dependency-row' },
+  addRedirectUriBtn: { container: 'redirectUriRows', requiredClass: 'redirecturi-row' },
+  addPermissionBtn: { container: 'permissionRows', requiredClass: 'permission-row' },
+  addOauth2ScopeBtn: { container: 'oauth2ScopeRows', requiredClass: 'oauth2-scope-card' },
+  addFedCredBtn: { container: 'fedcredRows', requiredClass: 'fedcred-card' },
+  addTagBtn: { container: 'tagRows', requiredClass: 'tag-row' },
+};
 
 describe('getHtml — generated webview script', () => {
   it('is syntactically valid JavaScript', () => {
@@ -182,6 +216,32 @@ describe('getHtml — generated webview script', () => {
     const { threw, wiredAddButtons } = runScriptWithStubDom(extractScript(getHtml('bare', bare, [], {})));
     expect(threw).toBeNull();
     expect(wiredAddButtons).toEqual(ADD_BUTTON_IDS);
+  });
+
+  it('has every "+ Add …" button append a row of the class the rest of the script expects', () => {
+    const script = extractScript(getHtml('sample', populatedFiles, ['other-app'], permissionOptions));
+    const failures: string[] = [];
+    const run = runScriptWithStubDom(script, (r) => {
+      for (const [buttonId, { container, requiredClass }] of Object.entries(ADD_BUTTON_EXPECTATIONS)) {
+        const handler = r.clickHandlers[buttonId];
+        if (typeof handler !== 'function') {
+          failures.push(`${buttonId}: no click handler wired`);
+          continue;
+        }
+        handler();
+        const appended = r.containers[container]?._appended ?? [];
+        const last = appended[appended.length - 1];
+        if (!last) {
+          failures.push(`${buttonId}: appended nothing to #${container}`);
+          continue;
+        }
+        if (!String(last.className).split(/\s+/).includes(requiredClass)) {
+          failures.push(`${buttonId}: appended "${last.className}" — missing required class "${requiredClass}"`);
+        }
+      }
+    });
+    expect(run.threw).toBeNull();
+    expect(failures).toEqual([]);
   });
 
   it('renders the collapsed summary line for each scope and credential', () => {
