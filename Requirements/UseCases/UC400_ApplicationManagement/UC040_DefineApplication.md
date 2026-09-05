@@ -2,9 +2,9 @@
 
 ## Overview
 
-This use case specifies the local file structure and format for an **application definition** — a locally-authored, deployable unit bundling the three Entra objects that make up one logical application (App Registration, Service Principal, Federated Credentials), parameterised with Jinja templating so it can later be rendered and deployed to more than one tenant/environment.
+This use case specifies the local file structure and format for an **application definition** — a locally-authored, deployable unit bundling the three Entra objects that make up one logical application (App Registration, Service Principal, Federated Credentials), parameterised with [Nunjucks](https://mozilla.github.io/nunjucks/) templating — a Jinja2-compatible engine for Node, chosen because Jinja2 itself is Python — so it can later be rendered and deployed to more than one tenant/environment.
 
-This is deliberately a **data-format specification**, not itself an interactive workflow: it defines what a valid application definition looks like on disk so the convention is stable. It is the local counterpart to a downloaded artifact (see [UC020 — Serialize Artifact to Project File](../UC200_ArtifactSerialisation/UC020_SerializeArtifactToProjectFile.md)), but runs in the opposite direction: UC020 mirrors a Graph object *into* a read-only-ish local snapshot; this use case mirrors a *locally-authored* definition *into* the Graph JSON shape needed to create or update that object, once deploy tooling exists to do so. Browsing what's already defined and editing an existing one's files through a structured view are both implemented — see [UC041 — Browse Application Definitions](UC041_BrowseApplicationDefinitions.md) and [UC042 — View Application Details](UC042_ViewApplicationDetails.md). Creating a *new* application definition from scratch, rendering its Jinja templates, and deploying the result to a tenant are not.
+This is deliberately a **data-format specification**, not itself an interactive workflow: it defines what a valid application definition looks like on disk so the convention is stable. It is the local counterpart to a downloaded artifact (see [UC020 — Serialize Artifact to Project File](../UC200_ArtifactSerialisation/UC020_SerializeArtifactToProjectFile.md)), but runs in the opposite direction: UC020 mirrors a Graph object *into* a read-only-ish local snapshot; this use case mirrors a *locally-authored* definition *into* the Graph JSON shape needed to create or update that object, once deploy tooling exists to do so. Browsing what's already defined and editing an existing one's files through a structured view are both implemented — see [UC041 — Browse Application Definitions](UC041_BrowseApplicationDefinitions.md) and [UC042 — View Application Details](UC042_ViewApplicationDetails.md). Creating a *new* application definition from scratch, rendering its Nunjucks templates, and deploying the result to a tenant are not.
 
 ## Actors
 
@@ -33,7 +33,7 @@ entra/
 
 ### `AppConfig.yaml`
 
-Not a Graph object mirror, and not itself Jinja-templated — but it is the source of the values the other three files' Jinja placeholders resolve to, one full render per listed environment. Shape:
+Not a Graph object mirror, and not itself Nunjucks-templated — but it is the source of the values the other three files' Nunjucks placeholders resolve to, one full render per listed environment. Shape:
 
 ```yaml
 application_name: my-application
@@ -51,17 +51,22 @@ Environments:
     publisherDomain: contoso-test.onmicrosoft.com
     tenancy_type: ciam
     environment_code: test
+
+Dependencies:
+  SampleAPIApp:
+    AppName: sample-api
 ```
 
 * `application_name` / `business_unit` — plain, application-wide metadata (not per environment).
 * `Variables` — default values shared across every environment. Anchored (`&DefaultVariables`) so a specific environment entry can splice it in (`<<: *DefaultVariables`) alongside its own overrides, rather than repeating shared values in every environment.
 * `Environments` — a list of deployment targets. `name`, `publisherDomain`, `tenancy_type`, and `environment_code` are the fixed fields every entry carries; an entry may add further keys a specific template needs. `tenancy_type` (`ciam` in the example) is this file's own concept — it is not read from, or written back to, a saved [connection](../UC100_Security/UC012_AddConnection.md)'s `tenantKind`; the two happen to draw the same Workforce/CIAM distinction but are otherwise independent until a later phase decides whether/how to unify them.
+* `Dependencies` — a map of other application definitions this one depends on for deploy-time sequencing. Each entry's key (`SampleAPIApp` above) is a reference name chosen by the author, used from a template as `{{ dependency_refs.SampleAPIApp.applicationId }}` (see below); its `AppName` value is the referenced application's folder name under `<root>/applications/` — the same folder [UC042](UC042_ViewApplicationDetails.md)'s form picks from a list of the project's existing applications, not free text, so a dependency can't point at an application that doesn't exist in the project. This only records the dependency and its sequencing implication; it does not itself resolve `applicationId` — that happens once deploy tooling exists (see Open questions), from the referenced application's own prior deploy result for the same environment.
 
-Rendering `Application.yaml.j2`, `FederatedCredentials.yaml.j2`, and `ServicePrincipal.yaml.j2` for one environment uses a Jinja context built from `Variables` merged with that environment's own entry — the environment's own fields win if a key appears in both. This happens once per entry in `Environments`, so one application definition with two environments listed renders (and, once deploy tooling exists, deploys) twice, independently.
+Rendering `Application.yaml.j2`, `FederatedCredentials.yaml.j2`, and `ServicePrincipal.yaml.j2` for one environment uses a Nunjucks context built from `Variables` merged with that environment's own entry — the environment's own fields win if a key appears in both — plus a `dependency_refs` object with one key per entry in `Dependencies`, each resolved (once deploy tooling exists) to that referenced application's own deploy result for the same environment. This happens once per entry in `Environments`, so one application definition with two environments listed renders (and, once deploy tooling exists, deploys) twice, independently, each render needing its dependencies deployed for that same environment first.
 
 ### `Application.yaml.j2`
 
-Models the Entra App Registration. Structured to mirror the JSON body `POST /applications` (create) or `PATCH /applications/{id}` (update) expects — same field names, same nesting — so it can be rendered and submitted with minimal transformation, not remapped through a bespoke schema. Jinja placeholders substitute the values that vary per deployment target (e.g. a redirect URI, a display-name suffix identifying the environment):
+Models the Entra App Registration. Structured to mirror the JSON body `POST /applications` (create) or `PATCH /applications/{id}` (update) expects — same field names, same nesting — so it can be rendered and submitted with minimal transformation, not remapped through a bespoke schema. Nunjucks placeholders substitute the values that vary per deployment target (e.g. a redirect URI, a display-name suffix identifying the environment):
 
 ```yaml
 displayName: "{{ application_name }} ({{ name }})"
@@ -106,13 +111,15 @@ Note the `appId` field's value: a Service Principal is created *from* an Applica
 
 ## Resolved
 
-* **Where do Jinja placeholder values come from?** From `AppConfig.yaml` itself — see above. `Variables` supplies defaults shared across all environments; each `Environments` entry supplies (and can override) values specific to one deployment target. This was an open question in an earlier draft of this use case; it no longer is.
+* **Where do Nunjucks placeholder values come from?** From `AppConfig.yaml` itself — see above. `Variables` supplies defaults shared across all environments; each `Environments` entry supplies (and can override) values specific to one deployment target; `Dependencies` supplies the `dependency_refs` object, one key per entry, resolved from each referenced application's own deploy result. This was an open question in an earlier draft of this use case; it no longer is.
+* **How is a dependency on another application recorded, and can it reference an application that doesn't exist?** As a `Dependencies` map entry (`AppName` naming the other application's folder) — see above. No: [UC042](UC042_ViewApplicationDetails.md)'s form picks `AppName` from the project's existing application folders rather than accepting free text, so a dependency can't be created pointing at a nonexistent application through that form (a hand-edited file could still do so, same as any other field this format doesn't otherwise constrain).
 
 ## Open questions (explicitly deferred, not decided by this use case)
 
 * **How does an application definition relate to a downloaded artifact?** Whether downloading an existing App Registration (UC031) should ever populate — or offer to seed — an application definition, rather than only the flat `appRegistrations/` snapshot, is unresolved. Until decided, the two representations are independent: downloading does not create or update an application definition, and deploying an application definition (once that exists) is not assumed to update the flat downloaded-snapshot files.
 * **Should `tenancy_type` unify with a connection's `tenantKind`?** Both distinguish Workforce from CIAM tenants but are currently separate concepts (see the `AppConfig.yaml` section above) — not decided either way.
-* **How is a *new* application definition created, and how are its templates rendered/deployed?** No command or UI for either is specified by this use case — only the on-disk format. [UC042](UC042_ViewApplicationDetails.md) covers editing an *existing* application's files, not creating one from scratch (e.g. an `entra.addApplication` command) or resolving its Jinja placeholders against a target environment; both remain expected in a later phase.
+* **How is a *new* application definition created, and how are its templates rendered/deployed?** No command or UI for either is specified by this use case — only the on-disk format. [UC042](UC042_ViewApplicationDetails.md) covers editing an *existing* application's files, not creating one from scratch (e.g. an `entra.addApplication` command) or resolving its Nunjucks placeholders against a target environment; both remain expected in a later phase.
+* **How does deploy tooling actually resolve `dependency_refs`, sequence multi-level dependency chains, or detect a dependency cycle?** `Dependencies` records the relationship and this use case's Rendering section states the one-level sequencing rule (a dependency deploys first, for the same environment), but nothing yet defines the deploy algorithm itself — including what happens if application A depends on B which depends on A. Deferred to whichever later phase specifies deploy tooling (see [Architecture/future_considerations.md](../../../Architecture/future_considerations.md)).
 
 ## Postconditions
 
@@ -125,3 +132,4 @@ Note the `appId` field's value: a Service Principal is created *from* an Applica
 * [UC012 — Add Connection](../UC100_Security/UC012_AddConnection.md) — a separate per-environment concept (`tenantKind`) that `AppConfig.yaml`'s `tenancy_type` parallels without (yet) being unified with — see the open questions above.
 * [UC041 — Browse Application Definitions](UC041_BrowseApplicationDefinitions.md) — the implemented read/browse use of this format.
 * [UC042 — View Application Details](UC042_ViewApplicationDetails.md) — the implemented structured editor for an existing application's files, and the source of the documented comment/anchor/extra-field loss on save.
+* [Architecture/future_considerations.md](../../../Architecture/future_considerations.md) — deploy-tooling design notes that would resolve `dependency_refs` and sequence dependent applications; not a decision record.

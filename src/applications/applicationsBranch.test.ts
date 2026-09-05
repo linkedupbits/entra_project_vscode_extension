@@ -91,6 +91,32 @@ describe('ApplicationsBranch.getChildren', () => {
   });
 });
 
+describe('ApplicationsBranch.listApplicationNames', () => {
+  it('returns an empty array when no workspace is open', async () => {
+    givenNoWorkspace();
+    expect(await new ApplicationsBranch().listApplicationNames()).toEqual([]);
+  });
+
+  it('returns sorted subfolder names, ignoring stray files', async () => {
+    givenApplicationsRoot();
+    vi.mocked(vscode.workspace.fs.readDirectory).mockResolvedValueOnce([
+      ['sample-web-app', vscode.FileType.Directory],
+      ['README.md', vscode.FileType.File],
+      ['sample-api', vscode.FileType.Directory],
+    ] as never);
+
+    expect(await new ApplicationsBranch().listApplicationNames()).toEqual(['sample-api', 'sample-web-app']);
+  });
+
+  it('returns an empty array when the applications folder does not exist yet', async () => {
+    givenApplicationsRoot();
+    vi.mocked(vscode.workspace.fs.readDirectory).mockRejectedValueOnce(
+      new (vscode as unknown as { FileSystemError: new (code: string) => Error }).FileSystemError('FileNotFound')
+    );
+    expect(await new ApplicationsBranch().listApplicationNames()).toEqual([]);
+  });
+});
+
 describe('ApplicationsBranch.getFiles', () => {
   const appFolderUri = { fsPath: '/repo/entra/applications/sample-web-app', toString: () => '/repo/entra/applications/sample-web-app' };
 

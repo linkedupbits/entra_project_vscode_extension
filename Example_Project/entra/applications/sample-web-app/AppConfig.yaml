@@ -13,3 +13,7 @@ Environments:
     publisherDomain: contoso-test.onmicrosoft.com
     tenancy_type: ciam
     environment_code: test
+
+Dependencies:
+  SampleAPIApp:
+    AppName: sample-api

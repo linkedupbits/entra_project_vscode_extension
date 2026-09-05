@@ -18,7 +18,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const authService = new AuthService(context.secrets, credentialStore);
   const connectionsBranch = new ConnectionsBranch(connectionStore, authService);
   const applicationStore = new ApplicationStore();
-  const projectBranch = new ProjectBranch(new ApplicationsBranch());
+  const applicationsBranch = new ApplicationsBranch();
+  const projectBranch = new ProjectBranch(applicationsBranch);
   const treeProvider = new EntraTreeProvider(connectionsBranch, projectBranch);
 
   const treeView = vscode.window.createTreeView('entraTree', { treeDataProvider: treeProvider });
@@ -85,7 +86,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('entra.refreshConnections', () => treeProvider.refresh()),
 
     vscode.commands.registerCommand('entra.viewApplication', (item: { folderUri: vscode.Uri; name: string }) => {
-      ApplicationFormPanel.show(applicationStore, item.folderUri, item.name);
+      ApplicationFormPanel.show(applicationStore, applicationsBranch, item.folderUri, item.name);
     })
   );
 }

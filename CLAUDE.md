@@ -71,7 +71,7 @@ code as it's built:
   (UC030–UC033).
 - `UseCases/UC400_ApplicationManagement/` — the on-disk structure for a locally-authored,
   deployable "application definition" (UC040 — **format only, not implemented**: don't assume any
-  code creates a *new* application from scratch, renders its Jinja templates, or deploys it just
+  code creates a *new* application from scratch, renders its Nunjucks templates, or deploys it just
   because the format is specified); browsing what's already defined (UC041 — **implemented**:
   `applicationsBranch.ts`); and a structured, editable view of an *existing* application's four
   files (UC042 — **implemented**: `applicationFormPanel.ts`/`applicationFormLogic.ts`/`applicationStore.ts`).
@@ -141,7 +141,7 @@ These came out of an explicit planning pass with the user and should not be sile
 - **Application definitions (UC040 format; UC041 browsing; UC042 structured editing — all implemented except the format's actual deploy path)**: a
   locally-authored, deployable unit distinct from the downloaded-artifact snapshot above — a folder under
   `<root>/applications/<name>/` of four files. `AppConfig.yaml` isn't templated itself but is where
-  the other three files' Jinja placeholders get their values from: application-wide metadata, a
+  the other three files' Nunjucks placeholders get their values from: application-wide metadata, a
   `Variables` block of defaults shared across environments, and an `Environments` list, each entry
   supplying one deployment target's own values (e.g. `tenancy_type: ciam`) — one render/deploy pass
   per entry. `Application.yaml.j2`, `FederatedCredentials.yaml.j2`, and `ServicePrincipal.yaml.j2`
@@ -165,7 +165,7 @@ These came out of an explicit planning pass with the user and should not be sile
   and the shared artifact-viewer webview below. All four files are genuinely structured (add/remove
   rows for every list-shaped field), not raw text areas — this was a deliberate later change from
   an earlier version of this form that kept the three `.yaml.j2` templates as opaque textareas
-  specifically to avoid losing comments/Jinja syntax on save; the user explicitly overrode that
+  specifically to avoid losing comments/Nunjucks syntax on save; the user explicitly overrode that
   caution and accepted the tradeoff below. `Application.yaml.j2` is a **Display name** field, a
   **Sign-in audience** `<select>` (the four real Graph values), a dynamic **Redirect URIs** list,
   and a dynamic **Required permissions** list — Graph's nested
@@ -177,7 +177,34 @@ These came out of an explicit planning pass with the user and should not be sile
   per credential, with `audiences` (a Graph list, but almost always single-valued) edited as one
   comma-separated text field, split/joined programmatically rather than as a nested list-of-lists.
   `ServicePrincipal.yaml.j2` is `appId`/`appRoleAssignmentRequired` (checkbox)/a dynamic `tags` list.
-  Saving parses-to-object-then-restringifies all four files fresh (`applicationStore.ts`, same
+  The Tags area also shows a **read-only, display-only** "Generated tags" preview — four tags
+  (`AppName:<Environment>_<businessUnit>_<appName>`, `Environment:{{Environment}}`, `<appName>`,
+  `BusinessUnit:<businessUnit>`) computed live in the webview's own JS from the Application
+  name/Business unit inputs as the user types (`updateGeneratedTags()` in `applicationFormPanel.ts`).
+  `<Environment>`/`{{Environment}}` are deliberately never substituted — there's no single
+  environment value at this point in the form, since one definition renders once per
+  `Environments` entry (UC040). This was an explicit product decision, confirmed with the user:
+  these tags are **not** written to `ServicePrincipal.yaml.j2`'s `tags` array by this form — future
+  deploy tooling is expected to apply them automatically at deploy time, not this use case. Don't
+  "complete" this by merging the preview into `resolveServicePrincipal()`/`serializeServicePrincipal()`
+  without re-confirming that decision; it was deliberate, not an oversight. Because these prefixes
+  are reserved for that deploy-time-applied preview, `resolveApplicationSubmit()` in
+  `applicationFormLogic.ts` is the one place in the Application/FederatedCredentials/ServicePrincipal
+  sections with real hard validation beyond structural cleanup: a custom tag starting with
+  `AppName:`, `Environment:`, or `BusinessUnit:` (case-sensitive, matching the preview's own casing)
+  is rejected on save (`reservedTagPrefix`), so a hand-typed tag can never collide with a generated
+  one.
+  `AppConfig.yaml` also carries a `Dependencies` map (`{ <referenceKey>: { AppName: <folder-name> } }`)
+  recording a deploy-time dependency on another application definition in the project, resolved
+  from a template as `{{ dependency_refs.<referenceKey>.applicationId }}` once deploy tooling
+  exists (see `Architecture/future_considerations.md`) — this only records the relationship, it
+  doesn't resolve anything itself. The form's `AppName` field is a `<select>` populated from
+  `ApplicationsBranch.listApplicationNames()` (the current application excluded), not free text —
+  an explicit product decision so a dependency can't be saved pointing at an application that
+  doesn't exist in the project; `ApplicationFormPanel.show()` therefore takes an `ApplicationsBranch`
+  alongside the `ApplicationStore` it already needed. A stale saved reference (folder since
+  renamed/deleted) is still rendered as a selectable option so re-saving the form doesn't silently
+  drop it. Saving parses-to-object-then-restringifies all four files fresh (`applicationStore.ts`, same
   approach as `connectionStore.ts`), so — documented in UC042, not silently accepted — it drops any
   hand-written comment in any of the four files, the `Variables: &DefaultVariables`-style anchor (or
   any other YAML anchor/alias), an environment's extra keys beyond the four fixed ones this form

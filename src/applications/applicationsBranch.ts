@@ -77,16 +77,27 @@ export class ApplicationsBranch {
     if (!root) {
       return [new ApplicationsEmptyPlaceholderItem()];
     }
+    const names = await this.listApplicationNames();
+    if (names.length === 0) {
+      return [new ApplicationsEmptyPlaceholderItem()];
+    }
+    return names.map((name) => new ApplicationItem(vscode.Uri.joinPath(root, name), name));
+  }
+
+  /**
+   * All application folder names under the applications root — used by UC042's Dependencies
+   * picker (see ApplicationFormPanel), not by the tree itself, which uses getChildren() instead.
+   */
+  async listApplicationNames(): Promise<string[]> {
+    const root = getApplicationsRootUri();
+    if (!root) {
+      return [];
+    }
     const entries = await readDirectorySafe(root);
-    const folders = entries
+    return entries
       .filter(([, type]) => type === vscode.FileType.Directory)
       .map(([name]) => name)
       .sort((a, b) => a.localeCompare(b));
-
-    if (folders.length === 0) {
-      return [new ApplicationsEmptyPlaceholderItem()];
-    }
-    return folders.map((name) => new ApplicationItem(vscode.Uri.joinPath(root, name), name));
   }
 
   async getFiles(application: ApplicationItem): Promise<vscode.TreeItem[]> {

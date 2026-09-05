@@ -8,3 +8,7 @@ requiredResourceAccess:
     resourceAccess:
       - id: "e1fe6dd8-ba31-4d61-89e7-88639da4683d" # User.Read
         type: Scope
+  - resourceAppId: "{{ dependency_refs.SampleAPIApp.applicationId }}"
+    resourceAccess:
+      - id: "00000000-0000-0000-0000-000000000000" # access_as_user, exposed by sample-api
+        type: Scope

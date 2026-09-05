@@ -7,6 +7,7 @@ function formInput(overrides: Partial<ApplicationFormInput> = {}): ApplicationFo
     business_unit: 'Customer Experience',
     variables: [],
     environments: [],
+    dependencies: [],
     application: { displayName: '', signInAudience: 'AzureADMyOrg', redirectUris: [], requiredPermissions: [] },
     federatedCredentials: [],
     servicePrincipal: { appId: '', appRoleAssignmentRequired: false, tags: [] },
@@ -65,6 +66,48 @@ describe('resolveApplicationSubmit', () => {
       expect(result.kind).toBe('ok');
       if (result.kind === 'ok') {
         expect(result.files.appConfig.Variables).toEqual({ owner_email: 'team@example.com' });
+      }
+    });
+  });
+
+  describe('dependencies', () => {
+    it('drops a fully-blank row silently', () => {
+      const result = resolveApplicationSubmit(formInput({ dependencies: [{ key: '  ', appName: '  ' }] }));
+      expect(result.kind).toBe('ok');
+      if (result.kind === 'ok') {
+        expect(result.files.appConfig.Dependencies).toEqual({});
+      }
+    });
+
+    it('reports missingDependencyKey when an application is selected without a key', () => {
+      const result = resolveApplicationSubmit(formInput({ dependencies: [{ key: '', appName: 'sample-api' }] }));
+      expect(result).toEqual({ kind: 'missingDependencyKey' });
+    });
+
+    it('reports missingDependencyAppName when a key is given without an application', () => {
+      const result = resolveApplicationSubmit(formInput({ dependencies: [{ key: 'SampleAPIApp', appName: '' }] }));
+      expect(result).toEqual({ kind: 'missingDependencyAppName', key: 'SampleAPIApp' });
+    });
+
+    it('reports duplicateDependencyKey', () => {
+      const result = resolveApplicationSubmit(
+        formInput({
+          dependencies: [
+            { key: 'SampleAPIApp', appName: 'sample-api' },
+            { key: 'SampleAPIApp', appName: 'sample-api-v2' },
+          ],
+        })
+      );
+      expect(result).toEqual({ kind: 'duplicateDependencyKey', key: 'SampleAPIApp' });
+    });
+
+    it('collects trimmed key/appName pairs', () => {
+      const result = resolveApplicationSubmit(
+        formInput({ dependencies: [{ key: '  SampleAPIApp  ', appName: '  sample-api  ' }] })
+      );
+      expect(result.kind).toBe('ok');
+      if (result.kind === 'ok') {
+        expect(result.files.appConfig.Dependencies).toEqual({ SampleAPIApp: { AppName: 'sample-api' } });
       }
     });
   });
@@ -289,6 +332,35 @@ describe('resolveApplicationSubmit', () => {
           tags: ['WindowsAzureActiveDirectoryIntegratedApp'],
         });
       }
+    });
+
+    it.each([['AppName:'], ['Environment:'], ['BusinessUnit:']])(
+      'rejects a custom tag starting with the reserved prefix %s',
+      (prefix) => {
+        const result = resolveApplicationSubmit(
+          formInput({ servicePrincipal: { appId: '', appRoleAssignmentRequired: false, tags: [prefix + 'whatever'] } })
+        );
+        expect(result).toEqual({ kind: 'reservedTagPrefix', tag: prefix + 'whatever', prefix });
+      }
+    );
+
+    it('allows a tag that merely contains a reserved prefix without starting with it', () => {
+      const result = resolveApplicationSubmit(
+        formInput({
+          servicePrincipal: { appId: '', appRoleAssignmentRequired: false, tags: ['Prefix:AppName:whatever'] },
+        })
+      );
+      expect(result.kind).toBe('ok');
+      if (result.kind === 'ok') {
+        expect(result.files.servicePrincipal.tags).toEqual(['Prefix:AppName:whatever']);
+      }
+    });
+
+    it('trims a tag before checking it against reserved prefixes', () => {
+      const result = resolveApplicationSubmit(
+        formInput({ servicePrincipal: { appId: '', appRoleAssignmentRequired: false, tags: ['  AppName:whatever  '] } })
+      );
+      expect(result).toEqual({ kind: 'reservedTagPrefix', tag: 'AppName:whatever', prefix: 'AppName:' });
     });
   });
 });

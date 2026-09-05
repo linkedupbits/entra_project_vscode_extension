@@ -14,6 +14,7 @@ const sampleAppConfig: AppConfig = {
   Environments: [
     { name: 'Dev', publisherDomain: 'contoso-dev.onmicrosoft.com', tenancy_type: 'ciam', environment_code: 'dev' },
   ],
+  Dependencies: { SampleAPIApp: { AppName: 'sample-api' } },
 };
 
 const sampleFiles: ApplicationFiles = {
@@ -52,7 +53,13 @@ describe('ApplicationStore.load', () => {
 
     const files = await new ApplicationStore().load(folderUri as never);
 
-    expect(files.appConfig).toEqual({ application_name: '', business_unit: '', Variables: {}, Environments: [] });
+    expect(files.appConfig).toEqual({
+      application_name: '',
+      business_unit: '',
+      Variables: {},
+      Environments: [],
+      Dependencies: {},
+    });
     expect(files.application).toEqual({
       displayName: '',
       signInAudience: 'AzureADMyOrg',

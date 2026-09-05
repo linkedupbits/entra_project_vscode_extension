@@ -2,6 +2,7 @@ import {
   AppConfig,
   ApplicationFields,
   ApplicationFiles,
+  DependencyEntry,
   EnvironmentEntry,
   FederatedCredentialEntry,
   RequiredPermission,
@@ -19,6 +20,12 @@ export interface EnvironmentRowInput {
   publisherDomain: string;
   tenancy_type: string;
   environment_code: string;
+}
+
+/** `appName` is picked from the project's existing application folders, not free text — see ApplicationFormPanel. */
+export interface DependencyRowInput {
+  key: string;
+  appName: string;
 }
 
 export interface RequiredPermissionRowInput {
@@ -54,6 +61,7 @@ export interface ApplicationFormInput {
   business_unit: string;
   variables: VariableRowInput[];
   environments: EnvironmentRowInput[];
+  dependencies: DependencyRowInput[];
   application: ApplicationFieldsInput;
   federatedCredentials: FederatedCredentialRowInput[];
   servicePrincipal: ServicePrincipalFieldsInput;
@@ -65,7 +73,22 @@ export type ApplicationSubmitResolution =
   | { kind: 'duplicateVariableKey'; key: string }
   | { kind: 'missingEnvironmentName'; index: number }
   | { kind: 'duplicateEnvironmentName'; name: string }
+  | { kind: 'missingDependencyKey' }
+  | { kind: 'missingDependencyAppName'; key: string }
+  | { kind: 'duplicateDependencyKey'; key: string }
+  | { kind: 'reservedTagPrefix'; tag: string; prefix: string }
   | { kind: 'ok'; files: ApplicationFiles };
+
+/**
+ * These are the prefixes UC042's Generated tags preview uses (see ApplicationFormPanel's
+ * `updateGeneratedTags()`) — reserved so a custom tag can never collide with, or be mistaken for,
+ * one of those deploy-time-applied tags. Case-sensitive, matching the preview's own casing exactly.
+ */
+const RESERVED_TAG_PREFIXES: readonly string[] = ['AppName:', 'Environment:', 'BusinessUnit:'];
+
+function reservedTagPrefixFor(tag: string): string | undefined {
+  return RESERVED_TAG_PREFIXES.find((prefix) => tag.startsWith(prefix));
+}
 
 const SIGN_IN_AUDIENCES: readonly SignInAudience[] = [
   'AzureADMyOrg',
@@ -129,11 +152,15 @@ function resolveServicePrincipal(input: ServicePrincipalFieldsInput): ServicePri
 /**
  * UC042's validation: required Application Name; Variables keys must be present and unique (a
  * row that's entirely blank — no key, no value — is a spacer the UI lets you add and is silently
- * dropped, not an error); Environment names must be present and unique. Everything else
- * (the Application/FederatedCredentials/ServicePrincipal sections) is structural cleanup — trim,
- * drop blank rows, coerce enum-like fields to a valid value — not hard validation, since UC040
- * never specified stricter rules than "mirror the Graph JSON shape", and inventing them here would
- * be asserting requirements nobody asked for.
+ * dropped, not an error); Environment names must be present and unique; Dependency rows must have
+ * both a reference key and a selected application, and reference keys must be unique (same
+ * blank-row-as-spacer rule as Variables); a custom Tag must not start with a reserved prefix
+ * (`AppName:`, `Environment:`, `BusinessUnit:`) reserved for the Generated tags preview, so a
+ * custom tag can never collide with or shadow one applied automatically at deploy time. Everything
+ * else (the Application/FederatedCredentials/ServicePrincipal sections) is structural cleanup —
+ * trim, drop blank rows, coerce enum-like fields to a valid value — not hard validation, since
+ * UC040 never specified stricter rules than "mirror the Graph JSON shape", and inventing them here
+ * would be asserting requirements nobody asked for.
  */
 export function resolveApplicationSubmit(input: ApplicationFormInput): ApplicationSubmitResolution {
   const applicationName = input.application_name.trim();
@@ -181,12 +208,40 @@ export function resolveApplicationSubmit(input: ApplicationFormInput): Applicati
     });
   }
 
+  const dependencies: Record<string, DependencyEntry> = {};
+  for (const row of input.dependencies) {
+    const key = row.key.trim();
+    const appName = row.appName.trim();
+    if (!key && !appName) {
+      continue; // blank spacer row
+    }
+    if (!key) {
+      return { kind: 'missingDependencyKey' };
+    }
+    if (!appName) {
+      return { kind: 'missingDependencyAppName', key };
+    }
+    if (Object.prototype.hasOwnProperty.call(dependencies, key)) {
+      return { kind: 'duplicateDependencyKey', key };
+    }
+    dependencies[key] = { AppName: appName };
+  }
+
   const appConfig: AppConfig = {
     application_name: applicationName,
     business_unit: input.business_unit.trim(),
     Variables: variables,
     Environments: environments,
+    Dependencies: dependencies,
   };
+
+  const servicePrincipal = resolveServicePrincipal(input.servicePrincipal);
+  for (const tag of servicePrincipal.tags) {
+    const prefix = reservedTagPrefixFor(tag);
+    if (prefix) {
+      return { kind: 'reservedTagPrefix', tag, prefix };
+    }
+  }
 
   return {
     kind: 'ok',
@@ -194,7 +249,7 @@ export function resolveApplicationSubmit(input: ApplicationFormInput): Applicati
       appConfig,
       application: resolveApplication(input.application),
       federatedCredentials: resolveFederatedCredentials(input.federatedCredentials),
-      servicePrincipal: resolveServicePrincipal(input.servicePrincipal),
+      servicePrincipal,
     },
   };
 }

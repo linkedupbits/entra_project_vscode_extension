@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import { ApplicationsBranch } from './applicationsBranch';
 import { ApplicationStore } from './applicationStore';
 import { resolveApplicationSubmit, ApplicationFormInput } from './applicationFormLogic';
 import { ApplicationFiles, AppConfig, RequiredPermission, FederatedCredentialEntry } from './types';
@@ -25,19 +26,20 @@ export class ApplicationFormPanel {
 
   private readonly panel: vscode.WebviewPanel;
 
-  static show(store: ApplicationStore, folderUri: vscode.Uri, name: string): void {
+  static show(store: ApplicationStore, applicationsBranch: ApplicationsBranch, folderUri: vscode.Uri, name: string): void {
     const key = folderUri.toString();
     const existing = ApplicationFormPanel.openPanels.get(key);
     if (existing) {
       existing.panel.reveal();
       return;
     }
-    const created = new ApplicationFormPanel(store, folderUri, name);
+    const created = new ApplicationFormPanel(store, applicationsBranch, folderUri, name);
     ApplicationFormPanel.openPanels.set(key, created);
   }
 
   private constructor(
     private readonly store: ApplicationStore,
+    private readonly applicationsBranch: ApplicationsBranch,
     private readonly folderUri: vscode.Uri,
     private readonly name: string
   ) {
@@ -58,8 +60,12 @@ export class ApplicationFormPanel {
   }
 
   private async render(): Promise<void> {
-    const files = await this.store.load(this.folderUri);
-    this.panel.webview.html = getHtml(this.name, files);
+    const [files, allNames] = await Promise.all([
+      this.store.load(this.folderUri),
+      this.applicationsBranch.listApplicationNames(),
+    ]);
+    const dependencyAppOptions = allNames.filter((name) => name !== this.name);
+    this.panel.webview.html = getHtml(this.name, files, dependencyAppOptions);
   }
 
   private async handleMessage(message: IncomingMessage): Promise<void> {
@@ -129,6 +135,35 @@ function environmentRowsHtml(appConfig: AppConfig): string {
   ).join('');
 }
 
+/**
+ * Renders the AppName half of a Dependencies row as a `<select>` of sibling application folders
+ * (see ApplicationsBranch.listApplicationNames), not free text — the user picks a project, not
+ * types a name that may not exist (this was an explicit product decision, not a validation
+ * shortcut). A currently-saved value that's since been renamed/deleted is still included as an
+ * option so it isn't silently discarded the next time this form is saved.
+ */
+function dependencyAppOptionsHtml(appOptions: readonly string[], selected: string): string {
+  const options = !selected || appOptions.includes(selected) ? appOptions : [selected, ...appOptions];
+  const placeholder = `<option value="" ${selected ? '' : 'selected'}>Select an application…</option>`;
+  const rest = options
+    .map((name) => `<option value="${escapeHtml(name)}" ${selectedAttr(selected, name)}>${escapeHtml(name)}</option>`)
+    .join('');
+  return placeholder + rest;
+}
+
+function dependencyRowsHtml(appConfig: AppConfig, appOptions: readonly string[]): string {
+  return Object.entries(appConfig.Dependencies)
+    .map(
+      ([key, dependency]) => `
+    <div class="row dependency-row">
+      <input type="text" class="dep-key" placeholder="Reference key (e.g. SampleAPIApp)" value="${escapeHtml(key)}" />
+      <select class="dep-appName">${dependencyAppOptionsHtml(appOptions, dependency.AppName)}</select>
+      <button type="button" class="remove-row-btn" aria-label="Remove">✕</button>
+    </div>`
+    )
+    .join('');
+}
+
 function stringListRowsHtml(values: readonly string[], inputClass: string, placeholder: string): string {
   return values
     .map(
@@ -174,10 +209,11 @@ function federatedCredentialRowsHtml(entries: readonly FederatedCredentialEntry[
     .join('');
 }
 
-function getHtml(name: string, files: ApplicationFiles): string {
+function getHtml(name: string, files: ApplicationFiles, dependencyAppOptions: readonly string[]): string {
   const nonce = getNonce();
   const csp = `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';`;
   const { appConfig, application, federatedCredentials, servicePrincipal } = files;
+  const dependencyAppOptionsJson = JSON.stringify(dependencyAppOptions).replace(/</g, '\\u003c');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -222,6 +258,16 @@ function getHtml(name: string, files: ApplicationFiles): string {
   input:focus, select:focus, textarea:focus {
     outline: 1px solid var(--vscode-focusBorder);
     outline-offset: -1px;
+  }
+  .generated-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 14px; }
+  .generated-tag {
+    display: inline-block;
+    background: var(--vscode-badge-background);
+    color: var(--vscode-badge-foreground);
+    border-radius: 2px;
+    padding: 2px 8px;
+    font-family: var(--vscode-editor-font-family, monospace);
+    font-size: 0.85em;
   }
   .row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
   .row input, .row select { flex: 1; min-width: 0; }
@@ -298,6 +344,12 @@ function getHtml(name: string, files: ApplicationFiles): string {
     <button type="button" class="add-row-btn" id="addEnvironmentBtn">+ Add environment</button>
     <div class="error" id="environmentsError"></div>
 
+    <h2>Dependencies</h2>
+    <div class="hint">Other applications this one depends on for deploy sequencing. Reference one in a template as <code>{{ dependency_refs.&lt;Key&gt;.applicationId }}</code>, resolved once the referenced application has been deployed.</div>
+    <div id="dependencyRows">${dependencyRowsHtml(appConfig, dependencyAppOptions)}</div>
+    <button type="button" class="add-row-btn" id="addDependencyBtn">+ Add dependency</button>
+    <div class="error" id="dependenciesError"></div>
+
     <hr />
 
     <h2>Application (App Registration)</h2>
@@ -340,8 +392,17 @@ function getHtml(name: string, files: ApplicationFiles): string {
     </label>
 
     <h3>Tags</h3>
+    <div class="hint">Generated automatically at deploy time from the Application name and Business unit above (see UC042) — read-only preview, not saved by this form.</div>
+    <div class="generated-tags" id="generatedTags">
+      <span class="generated-tag" id="generatedTagAppName"></span>
+      <span class="generated-tag" id="generatedTagEnvironment"></span>
+      <span class="generated-tag" id="generatedTagName"></span>
+      <span class="generated-tag" id="generatedTagBusinessUnit"></span>
+    </div>
+    <div class="hint">Additional custom tags:</div>
     <div id="tagRows">${stringListRowsHtml(servicePrincipal.tags, 'tag', 'Tag')}</div>
     <button type="button" class="add-row-btn" id="addTagBtn">+ Add tag</button>
+    <div class="error" id="tagsError"></div>
 
     <div class="error" id="generalError"></div>
 
@@ -361,11 +422,40 @@ function getHtml(name: string, files: ApplicationFiles): string {
     const variablesError = document.getElementById('variablesError');
     const environmentRows = document.getElementById('environmentRows');
     const environmentsError = document.getElementById('environmentsError');
+    const dependencyRows = document.getElementById('dependencyRows');
+    const dependenciesError = document.getElementById('dependenciesError');
+    const dependencyAppOptions = ${dependencyAppOptionsJson};
     const redirectUriRows = document.getElementById('redirectUriRows');
     const permissionRows = document.getElementById('permissionRows');
     const fedcredRows = document.getElementById('fedcredRows');
     const tagRows = document.getElementById('tagRows');
+    const tagsError = document.getElementById('tagsError');
     const generalError = document.getElementById('generalError');
+    const businessUnitInput = document.getElementById('businessUnit');
+    const generatedTagAppName = document.getElementById('generatedTagAppName');
+    const generatedTagEnvironment = document.getElementById('generatedTagEnvironment');
+    const generatedTagName = document.getElementById('generatedTagName');
+    const generatedTagBusinessUnit = document.getElementById('generatedTagBusinessUnit');
+
+    function updateGeneratedTags() {
+      const appName = applicationNameInput.value;
+      const businessUnit = businessUnitInput.value;
+      generatedTagAppName.textContent = 'AppName:<Environment>_' + businessUnit + '_' + appName;
+      generatedTagEnvironment.textContent = 'Environment:{{Environment}}';
+      generatedTagName.textContent = appName;
+      generatedTagBusinessUnit.textContent = 'BusinessUnit:' + businessUnit;
+    }
+    applicationNameInput.addEventListener('input', updateGeneratedTags);
+    businessUnitInput.addEventListener('input', updateGeneratedTags);
+    updateGeneratedTags();
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
 
     function onRemoveClick(row) {
       row.querySelector('.remove-row-btn').addEventListener('click', function () {
@@ -400,6 +490,25 @@ function getHtml(name: string, files: ApplicationFiles): string {
           '<input type="text" class="env-publisherDomain" placeholder="Publisher domain" />' +
           '<input type="text" class="env-tenancy_type" placeholder="Tenancy type (e.g. ciam)" />' +
           '<input type="text" class="env-environment_code" placeholder="Environment code" />' +
+          '<button type="button" class="remove-row-btn" aria-label="Remove">✕</button>'
+      );
+    }
+
+    function addDependencyRow() {
+      const optionsHtml =
+        '<option value="" selected>Select an application…</option>' +
+        dependencyAppOptions
+          .map(function (name) {
+            return '<option value="' + escapeHtml(name) + '">' + escapeHtml(name) + '</option>';
+          })
+          .join('');
+      appendRow(
+        dependencyRows,
+        'row dependency-row',
+        '<input type="text" class="dep-key" placeholder="Reference key (e.g. SampleAPIApp)" />' +
+          '<select class="dep-appName">' +
+          optionsHtml +
+          '</select>' +
           '<button type="button" class="remove-row-btn" aria-label="Remove">✕</button>'
       );
     }
@@ -456,6 +565,7 @@ function getHtml(name: string, files: ApplicationFiles): string {
     });
     document.getElementById('addVariableBtn').addEventListener('click', addVariableRow);
     document.getElementById('addEnvironmentBtn').addEventListener('click', addEnvironmentRow);
+    document.getElementById('addDependencyBtn').addEventListener('click', addDependencyRow);
     document.getElementById('addRedirectUriBtn').addEventListener('click', addRedirectUriRow);
     document.getElementById('addPermissionBtn').addEventListener('click', addPermissionRow);
     document.getElementById('addFedCredBtn').addEventListener('click', addFedCredRow);
@@ -468,6 +578,8 @@ function getHtml(name: string, files: ApplicationFiles): string {
       applicationNameError.classList.remove('visible');
       variablesError.classList.remove('visible');
       environmentsError.classList.remove('visible');
+      dependenciesError.classList.remove('visible');
+      tagsError.classList.remove('visible');
       generalError.classList.remove('visible');
     }
 
@@ -495,6 +607,12 @@ function getHtml(name: string, files: ApplicationFiles): string {
           environment_code: row.querySelector('.env-environment_code').value,
         };
       });
+      const dependencies = Array.from(document.querySelectorAll('.dependency-row')).map(function (row) {
+        return {
+          key: row.querySelector('.dep-key').value,
+          appName: row.querySelector('.dep-appName').value,
+        };
+      });
       const requiredPermissions = Array.from(document.querySelectorAll('.permission-row')).map(function (row) {
         return {
           resourceAppId: row.querySelector('.perm-resourceAppId').value,
@@ -516,9 +634,10 @@ function getHtml(name: string, files: ApplicationFiles): string {
         type: 'submit',
         input: {
           application_name: applicationNameInput.value,
-          business_unit: document.getElementById('businessUnit').value,
+          business_unit: businessUnitInput.value,
           variables: variables,
           environments: environments,
+          dependencies: dependencies,
           application: {
             displayName: document.getElementById('displayName').value,
             signInAudience: document.getElementById('signInAudience').value,
@@ -551,6 +670,20 @@ function getHtml(name: string, files: ApplicationFiles): string {
       } else if (message.type === 'duplicateEnvironmentName') {
         environmentsError.textContent = 'The environment name "' + message.name + '" is used more than once.';
         environmentsError.classList.add('visible');
+      } else if (message.type === 'missingDependencyKey') {
+        dependenciesError.textContent = 'Every dependency needs a reference key (remove any row you don\\'t need).';
+        dependenciesError.classList.add('visible');
+      } else if (message.type === 'missingDependencyAppName') {
+        dependenciesError.textContent = 'The dependency "' + message.key + '" needs an application selected.';
+        dependenciesError.classList.add('visible');
+      } else if (message.type === 'duplicateDependencyKey') {
+        dependenciesError.textContent = 'The dependency reference key "' + message.key + '" is used more than once.';
+        dependenciesError.classList.add('visible');
+      } else if (message.type === 'reservedTagPrefix') {
+        tagsError.textContent =
+          'The tag "' + message.tag + '" starts with the reserved prefix "' + message.prefix +
+          '", which is generated automatically at deploy time (see the preview above). Remove or rename this custom tag.';
+        tagsError.classList.add('visible');
       } else if (message.type === 'error') {
         generalError.textContent = message.message;
         generalError.classList.add('visible');

@@ -17,6 +17,7 @@ describe('emptyAppConfig', () => {
       business_unit: '',
       Variables: {},
       Environments: [],
+      Dependencies: {},
     });
   });
 });
@@ -39,6 +40,7 @@ describe('normalizeAppConfig', () => {
       Environments: [
         { name: 'Dev', publisherDomain: 'contoso-dev.onmicrosoft.com', tenancy_type: 'ciam', environment_code: 'dev' },
       ],
+      Dependencies: { SampleAPIApp: { AppName: 'sample-api' } },
     };
     expect(normalizeAppConfig(parsed)).toEqual(parsed);
   });
@@ -66,6 +68,15 @@ describe('normalizeAppConfig', () => {
       { name: 'Dev', publisherDomain: '', tenancy_type: '', environment_code: '' },
       { name: '', publisherDomain: '', tenancy_type: '', environment_code: '' },
     ]);
+  });
+
+  it('ignores a non-object Dependencies value', () => {
+    expect(normalizeAppConfig({ Dependencies: 'not an object' }).Dependencies).toEqual({});
+  });
+
+  it('defaults a missing/non-string AppName on a dependency entry rather than throwing', () => {
+    const result = normalizeAppConfig({ Dependencies: { SampleAPIApp: {}, Broken: 'not an object' } });
+    expect(result.Dependencies).toEqual({ SampleAPIApp: { AppName: '' }, Broken: { AppName: '' } });
   });
 });
 

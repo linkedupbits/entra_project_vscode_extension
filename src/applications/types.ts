@@ -11,11 +11,25 @@ export interface EnvironmentEntry {
   environment_code: string;
 }
 
+/**
+ * One entry in `AppConfig.yaml`'s `Dependencies` map — a reference to another application
+ * definition's folder (`AppName`, matching that application's folder name under
+ * `<root>/applications/`, not a Graph ID) that this one depends on for deploy-time sequencing.
+ * The map's own key (not stored on the entry itself) is the name a template refers to it by, e.g.
+ * `{{ dependency_refs.SampleAPIApp.applicationId }}` in `Application.yaml.j2` — resolved once
+ * deploy tooling exists, from that referenced application's own prior deploy result, the same way
+ * `ServicePrincipal.yaml.j2`'s `{{ application.appId }}` resolves from this application's own.
+ */
+export interface DependencyEntry {
+  AppName: string;
+}
+
 export interface AppConfig {
   application_name: string;
   business_unit: string;
   Variables: Record<string, string>;
   Environments: EnvironmentEntry[];
+  Dependencies: Record<string, DependencyEntry>;
 }
 
 export type SignInAudience =
@@ -81,7 +95,7 @@ export interface ApplicationFiles {
 }
 
 export function emptyAppConfig(): AppConfig {
-  return { application_name: '', business_unit: '', Variables: {}, Environments: [] };
+  return { application_name: '', business_unit: '', Variables: {}, Environments: [], Dependencies: {} };
 }
 
 export function emptyApplicationFields(): ApplicationFields {
@@ -124,11 +138,19 @@ export function normalizeAppConfig(parsed: unknown): AppConfig {
     ? obj.Environments.map((entry) => normalizeEnvironmentEntry(entry))
     : [];
 
+  const dependencies: Record<string, DependencyEntry> = {};
+  if (obj.Dependencies && typeof obj.Dependencies === 'object') {
+    for (const [key, value] of Object.entries(obj.Dependencies as Record<string, unknown>)) {
+      dependencies[key] = normalizeDependencyEntry(value);
+    }
+  }
+
   return {
     application_name: asString(obj.application_name),
     business_unit: asString(obj.business_unit),
     Variables: variables,
     Environments: environments,
+    Dependencies: dependencies,
   };
 }
 
@@ -140,6 +162,11 @@ function normalizeEnvironmentEntry(entry: unknown): EnvironmentEntry {
     tenancy_type: asString(obj.tenancy_type),
     environment_code: asString(obj.environment_code),
   };
+}
+
+function normalizeDependencyEntry(entry: unknown): DependencyEntry {
+  const obj = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {};
+  return { AppName: asString(obj.AppName) };
 }
 
 /**

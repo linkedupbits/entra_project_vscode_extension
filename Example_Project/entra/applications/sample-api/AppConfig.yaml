@@ -1,9 +1,7 @@
 application_name: sample-api
-business_unit: Platform Engineering
-
-Variables: &DefaultVariables
+business_unit: Funds
+Variables:
   owner_email: platform-team@example.com
-
 Environments:
   - name: Dev
     publisherDomain: contoso-dev.onmicrosoft.com
@@ -13,3 +11,4 @@ Environments:
     publisherDomain: contoso.onmicrosoft.com
     tenancy_type: workforce
     environment_code: prod
+Dependencies: {}

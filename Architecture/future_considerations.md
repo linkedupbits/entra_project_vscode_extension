@@ -10,10 +10,10 @@ questions are resolved and real deploy tooling is on the roadmap.
 
 [UC040](../Requirements/UseCases/UC400_ApplicationManagement/UC040_DefineApplication.md) specifies
 the on-disk format for a locally-authored **application definition** (`AppConfig.yaml` +
-three Jinja-templated files) but explicitly stops at the format — no code renders, validates, or
+three Nunjucks-templated files) but explicitly stops at the format — no code renders, validates, or
 deploys one yet. Three future capabilities would build on that format:
 
-1. A common **precompile/deployment library** — renders the Jinja templates per environment and
+1. A common **precompile/deployment library** — renders the Nunjucks templates per environment and
    deploys the result to Entra via Graph, in the sequence UC040 already specifies.
 2. A **GitHub Action** using that library to push the same application definitions to Entra from
    CI (the "push IaC to a tenant" workflow).
@@ -26,15 +26,26 @@ This doc analyzes what each involves and whether they belong in this repo or spl
 
 ### 1. Precompile/deployment library
 
-- **Jinja rendering in Node.** UC040's format commits to Jinja syntax, but Jinja itself is
-  Python. The realistic Node option is [nunjucks](https://mozilla.github.io/nunjucks/) (closest
-  semantic match); whatever is chosen, it's a decision every consumer inherits at once.
+- **Nunjucks rendering in Node.** UC040's format commits to Jinja2-compatible syntax, rendered via
+  [Nunjucks](https://mozilla.github.io/nunjucks/) — the realistic Node option, since Jinja2 itself
+  is Python. This choice is already reflected in UC040/`FunctionalRequirements.md`; what's still
+  undecided here is only *where* the rendering code itself lives (this doc's subject), not which
+  library it uses.
 - **Per-environment render loop**: merge `Variables` with one `Environments` entry, render all
-  three `.j2` files, once per environment (UC040 "Rendering ... uses a Jinja context ...").
+  three `.j2` files, once per environment (UC040 "Rendering ... uses a Nunjucks context ...").
 - **Sequencing + cross-step placeholder resolution**: `Application.yaml.j2` must deploy first;
   its returned `appId`/object ID then feeds `ServicePrincipal.yaml.j2` and
   `FederatedCredentials.yaml.j2` (UC040, `ServicePrincipal.yaml.j2` section). This is an ordered
   deploy plan with runtime values flowing between steps, not pure templating.
+- **Cross-application sequencing via `Dependencies`**: `AppConfig.yaml`'s `Dependencies` map
+  (UC040) names other application definitions this one needs deployed first, for the same
+  environment, resolved from a template as `{{ dependency_refs.<key>.applicationId }}` — the same
+  kind of ordered, runtime-value-flowing dependency as the intra-application one above, but across
+  application folders rather than within one. This is a second, compounding instance of the
+  sequencing problem this library needs to solve: it must build a deploy plan across *all* selected
+  applications, not just within one, detect a dependency cycle (UC040 flags this as unresolved),
+  and decide what "select applications to deploy" even means when a selected application's
+  dependency wasn't itself selected.
 - **Idempotency/diffing**: CI would run this on every merge, so the library needs to detect
   existing objects (by `appId` once known, or a naming convention before that) and decide
   create-vs-patch rather than blindly re-`POST`ing.
