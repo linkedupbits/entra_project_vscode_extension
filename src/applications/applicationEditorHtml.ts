@@ -1,5 +1,6 @@
 import * as crypto from 'crypto';
 import { ApplicationFiles, AppConfig, RequiredPermission, FederatedCredentialEntry } from './types';
+import { MICROSOFT_GRAPH_APP_ID, parseResourceAppId, buildDependencyReference } from './resourceAppIdReference';
 
 function getNonce(): string {
   return crypto.randomBytes(16).toString('base64');
@@ -87,20 +88,50 @@ function stringListRowsHtml(values: readonly string[], inputClass: string, place
     .join('');
 }
 
-function requiredPermissionRowsHtml(rows: readonly RequiredPermission[]): string {
+/**
+ * Renders the fixed "Microsoft Graph" option plus one option per current `AppConfig.yaml`
+ * Dependencies reference key — see `resourceAppIdReference.ts` for why these are the only two
+ * recognised shapes a Required Permission row's `resourceAppId` can take through this dropdown.
+ */
+function permissionResourceAppIdOptionsHtml(selected: string, dependencyKeys: readonly string[]): string {
+  const graphOption = `<option value="${MICROSOFT_GRAPH_APP_ID}" ${selectedAttr(selected, MICROSOFT_GRAPH_APP_ID)}>Microsoft Graph</option>`;
+  const dependencyOptions = dependencyKeys
+    .map((key) => {
+      const value = buildDependencyReference(key);
+      return `<option value="${escapeHtml(value)}" ${selectedAttr(selected, value)}>${escapeHtml(key)}</option>`;
+    })
+    .join('');
+  return graphOption + dependencyOptions;
+}
+
+/**
+ * A row's `resourceAppId` renders as the dropdown above when it matches one of the two recognised
+ * shapes, or — when it doesn't (a hand-edited file, a reference to a since-renamed/removed
+ * dependency, or a raw third-party GUID this form doesn't model) — as plain text with a warning
+ * icon instead, so the value is never silently discarded or misrepresented (see UC042).
+ */
+function requiredPermissionRowsHtml(rows: readonly RequiredPermission[], dependencyKeys: readonly string[]): string {
   return rows
-    .map(
-      (row) => `
+    .map((row) => {
+      const choice = parseResourceAppId(row.resourceAppId, dependencyKeys);
+      const resourceAppIdField =
+        choice.kind === 'unrecognized'
+          ? `<span class="perm-resourceAppId-wrap">
+        <input type="text" class="perm-resourceAppId" placeholder="Resource App ID" value="${escapeHtml(row.resourceAppId)}" />
+        <span class="warning-icon" role="img" aria-label="Warning" title="Not recognised as Microsoft Graph or one of this application's Dependencies — shown as raw text.">⚠</span>
+      </span>`
+          : `<select class="perm-resourceAppId">${permissionResourceAppIdOptionsHtml(row.resourceAppId, dependencyKeys)}</select>`;
+      return `
     <div class="row permission-row">
-      <input type="text" class="perm-resourceAppId" placeholder="Resource App ID" value="${escapeHtml(row.resourceAppId)}" />
+      ${resourceAppIdField}
       <input type="text" class="perm-id" placeholder="Permission ID" value="${escapeHtml(row.id)}" />
       <select class="perm-type">
         <option value="Scope" ${selectedAttr(row.type, 'Scope')}>Scope (delegated)</option>
         <option value="Role" ${selectedAttr(row.type, 'Role')}>Role (application)</option>
       </select>
       <button type="button" class="remove-row-btn" aria-label="Remove">✕</button>
-    </div>`
-    )
+    </div>`;
+    })
     .join('');
 }
 
@@ -132,6 +163,7 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
   const csp = `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';`;
   const { appConfig, application, federatedCredentials, servicePrincipal } = files;
   const dependencyAppOptionsJson = JSON.stringify(dependencyAppOptions).replace(/</g, '\\u003c');
+  const microsoftGraphAppIdJson = JSON.stringify(MICROSOFT_GRAPH_APP_ID);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -191,6 +223,12 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
   .row input, .row select { flex: 1; min-width: 0; }
   .fedcred-row-grid { flex-wrap: wrap; }
   .fedcred-row-grid input { flex: 1 1 30%; }
+  .perm-resourceAppId-wrap { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; }
+  .warning-icon {
+    flex: 0 0 auto;
+    color: var(--vscode-editorWarning-foreground, var(--vscode-problemsWarningIcon-foreground, orange));
+    cursor: help;
+  }
   .remove-row-btn {
     flex: 0 0 auto;
     background: none;
@@ -289,8 +327,8 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
     <button type="button" class="add-row-btn" id="addRedirectUriBtn">+ Add redirect URI</button>
 
     <h3>Required permissions</h3>
-    <div class="hint">One row per permission — rows sharing a Resource App ID are grouped together when saved.</div>
-    <div id="permissionRows">${requiredPermissionRowsHtml(application.requiredPermissions)}</div>
+    <div class="hint">One row per permission — rows sharing a Resource App ID are grouped together when saved. Resource App ID is either Microsoft Graph or one of this application's Dependencies (added above); a value that's neither (e.g. from a hand-edited file, or referencing a dependency since renamed or removed) is shown as plain text with a ⚠ warning instead.</div>
+    <div id="permissionRows">${requiredPermissionRowsHtml(application.requiredPermissions, Object.keys(appConfig.Dependencies))}</div>
     <button type="button" class="add-row-btn" id="addPermissionBtn">+ Add permission</button>
 
     <h2>Federated Credentials</h2>
@@ -343,6 +381,7 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
     const dependencyRows = document.getElementById('dependencyRows');
     const dependenciesError = document.getElementById('dependenciesError');
     const dependencyAppOptions = ${dependencyAppOptionsJson};
+    const MICROSOFT_GRAPH_APP_ID = ${microsoftGraphAppIdJson};
     const redirectUriRows = document.getElementById('redirectUriRows');
     const permissionRows = document.getElementById('permissionRows');
     const fedcredRows = document.getElementById('fedcredRows');
@@ -445,11 +484,67 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
       );
     }
 
+    // Mirrors resourceAppIdReference.ts's buildDependencyReference() — duplicated here because
+    // this script runs in the webview's own isolated JS context, which can't import that module.
+    function buildDependencyReference(key) {
+      return '{{ dependency_refs.' + key + '.applicationId }}';
+    }
+
+    function currentDependencyKeys() {
+      return Array.from(document.querySelectorAll('.dep-key'))
+        .map(function (input) {
+          return input.value.trim();
+        })
+        .filter(function (key) {
+          return key !== '';
+        });
+    }
+
+    function permissionResourceAppIdOptionsHtml(selectedValue, dependencyKeys) {
+      var html =
+        '<option value="' +
+        MICROSOFT_GRAPH_APP_ID +
+        '"' +
+        (selectedValue === MICROSOFT_GRAPH_APP_ID ? ' selected' : '') +
+        '>Microsoft Graph</option>';
+      dependencyKeys.forEach(function (key) {
+        var value = buildDependencyReference(key);
+        html +=
+          '<option value="' +
+          escapeHtml(value) +
+          '"' +
+          (selectedValue === value ? ' selected' : '') +
+          '>' +
+          escapeHtml(key) +
+          '</option>';
+      });
+      return html;
+    }
+
+    // Keeps every Required Permission row's Resource App ID dropdown (not the plain-text fallback
+    // rows — see requiredPermissionRowsHtml) in sync with the current Dependencies rows, so a
+    // dependency added/renamed/removed during this same editing session is immediately selectable
+    // without having to close and reopen the tab. Cheap enough over this form's realistic row
+    // counts to just run on every edit (see notifyEdit) rather than wiring narrower triggers.
+    function refreshPermissionResourceAppIdOptions() {
+      var keys = currentDependencyKeys();
+      document.querySelectorAll('.permission-row').forEach(function (row) {
+        var select = row.querySelector('select.perm-resourceAppId');
+        if (!select) {
+          return; // the unrecognized-value fallback is a plain text input, not a select — leave it alone
+        }
+        var currentValue = select.value;
+        select.innerHTML = permissionResourceAppIdOptionsHtml(currentValue, keys);
+      });
+    }
+
     function addPermissionRow() {
       appendRow(
         permissionRows,
         'row permission-row',
-        '<input type="text" class="perm-resourceAppId" placeholder="Resource App ID" />' +
+        '<select class="perm-resourceAppId">' +
+          permissionResourceAppIdOptionsHtml('', currentDependencyKeys()) +
+          '</select>' +
           '<input type="text" class="perm-id" placeholder="Permission ID" />' +
           '<select class="perm-type">' +
           '<option value="Scope">Scope (delegated)</option>' +
@@ -571,8 +666,11 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
 
     // Notifies the extension host of the current form state on every relevant change, so the
     // document is marked dirty (VS Code's native "unsaved changes" tab indicator) as soon as
-    // anything differs from what's on disk — not only when Save is explicitly clicked.
+    // anything differs from what's on disk — not only when Save is explicitly clicked. Also keeps
+    // the Required Permissions dropdowns in sync with the current Dependencies rows first (see
+    // refreshPermissionResourceAppIdOptions), so the snapshot below reflects that refreshed state.
     function notifyEdit() {
+      refreshPermissionResourceAppIdOptions();
       vscode.postMessage({ type: 'edit', input: buildInputSnapshot() });
     }
     form.addEventListener('input', notifyEdit);

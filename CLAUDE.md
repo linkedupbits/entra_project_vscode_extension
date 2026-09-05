@@ -206,7 +206,22 @@ These came out of an explicit planning pass with the user and should not be sile
   `requiredResourceAccess[].resourceAccess[]` shape is flattened to one flat `RequiredPermission`
   row (`resourceAppId`/`id`/`type`) per individual permission for editing (`normalizeApplicationFields()`
   in `src/applications/types.ts`), then regrouped back to the nested shape on save
-  (`groupRequiredPermissions()`) — this avoids a two-level nested dynamic list in the webview.
+  (`groupRequiredPermissions()`) — this avoids a two-level nested dynamic list in the webview. A
+  row's `resourceAppId` is itself a dropdown (`applicationEditorHtml.ts`), not free text: **Microsoft
+  Graph** (storing `wellKnownPermissions.ts`'s `MICROSOFT_GRAPH_APP_ID` constant) plus one option
+  per reference key currently in the same form's **Dependencies** section, storing the Jinja
+  reference `{{ dependency_refs.<key>.applicationId }}` Dependencies itself already uses — the type
+  stays a plain `string` (`RequiredPermission.resourceAppId`), so this is a UI constraint on how
+  that string gets written, not a schema change. `resourceAppIdReference.ts`'s
+  `parseResourceAppId()`/`buildDependencyReference()` are the real, tested logic behind this (used
+  both for the initial server-rendered choice of dropdown-vs-text and, duplicated in the webview's
+  own vanilla JS — it can't import a TypeScript module into its isolated script context — for
+  keeping the dropdown's Dependency options live as the user edits Dependencies rows in the same
+  session). A `resourceAppId` already on disk that's neither the well-known Graph ID nor a reference
+  to a *currently defined* Dependencies key — checked once at open, not continuously — renders as
+  plain text with a ⚠ warning icon instead of the dropdown, so a hand-edited value, a reference to a
+  since-renamed/removed dependency, or an unmodelled third-party GUID is never silently discarded or
+  misrepresented; a freshly added row always starts as a working dropdown.
   `FederatedCredentials.yaml.j2` is a dynamic list of `name`/`issuer`/`subject`/`description` fields
   per credential, with `audiences` (a Graph list, but almost always single-valued) edited as one
   comma-separated text field, split/joined programmatically rather than as a nested list-of-lists.
