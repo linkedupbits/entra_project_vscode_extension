@@ -255,18 +255,47 @@ function oauth2PermissionScopeRowsHtml(scopes: readonly Oauth2PermissionScopeEnt
     .join('');
 }
 
+/** The line shown in a credential's `<summary>` while its card is collapsed — see federatedCredentialRowsHtml. */
+function fedcredSummaryLabel(name: string, subject: string): string {
+  const text = name || '(unnamed)';
+  return subject ? `${text} — ${subject}` : text;
+}
+
+/**
+ * Each credential renders as a collapsible `<details>` card, collapsed by default (a credential
+ * loaded from disk) — a new one added via **+ Add federated credential** starts expanded instead —
+ * the same treatment as the Exposed API scopes list above, for the same reason: several long
+ * free-text fields per entry would otherwise wrap unreadably as a single-line row. `<summary>`
+ * shows the credential's `Name` and `Subject` (its two most identifying fields), kept live by
+ * `refreshFedCredSummaries()` in this file's webview script as either is edited.
+ */
 function federatedCredentialRowsHtml(entries: readonly FederatedCredentialEntry[]): string {
   return entries
     .map(
       (entry) => `
-    <div class="row fedcred-row fedcred-row-grid">
-      <input type="text" class="fedcred-name" placeholder="Name" value="${escapeHtml(entry.name)}" />
-      <input type="text" class="fedcred-issuer" placeholder="Issuer" value="${escapeHtml(entry.issuer)}" />
-      <input type="text" class="fedcred-subject" placeholder="Subject" value="${escapeHtml(entry.subject)}" />
-      <input type="text" class="fedcred-audiences" placeholder="Audiences (comma-separated)" value="${escapeHtml(entry.audiences.join(', '))}" />
-      <input type="text" class="fedcred-description" placeholder="Description" value="${escapeHtml(entry.description)}" />
-      <button type="button" class="remove-row-btn" aria-label="Remove">✕</button>
-    </div>`
+    <details class="fedcred-card">
+      <summary class="fedcred-summary">
+        <span class="fedcred-summary-label">${escapeHtml(fedcredSummaryLabel(entry.name, entry.subject))}</span>
+        <button type="button" class="remove-row-btn" aria-label="Remove">✕</button>
+      </summary>
+      <div class="fedcred-body">
+        <label>Name
+          <input type="text" class="fedcred-name" value="${escapeHtml(entry.name)}" />
+        </label>
+        <label>Issuer
+          <input type="text" class="fedcred-issuer" value="${escapeHtml(entry.issuer)}" />
+        </label>
+        <label>Subject
+          <input type="text" class="fedcred-subject" value="${escapeHtml(entry.subject)}" />
+        </label>
+        <label>Audiences (comma-separated)
+          <input type="text" class="fedcred-audiences" value="${escapeHtml(entry.audiences.join(', '))}" />
+        </label>
+        <label>Description
+          <input type="text" class="fedcred-description" value="${escapeHtml(entry.description)}" />
+        </label>
+      </div>
+    </details>`
     )
     .join('');
 }
@@ -347,15 +376,13 @@ export function getHtml(
   }
   .row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
   .row input, .row select { flex: 1; min-width: 0; }
-  .fedcred-row-grid { flex-wrap: wrap; }
-  .fedcred-row-grid input { flex: 1 1 30%; }
-  .oauth2-scope-card {
+  .oauth2-scope-card, .fedcred-card {
     display: block;
     border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
     border-radius: 3px;
     margin-bottom: 8px;
   }
-  .oauth2-scope-summary {
+  .oauth2-scope-summary, .fedcred-summary {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -363,7 +390,7 @@ export function getHtml(
     padding: 8px 12px;
     cursor: pointer;
   }
-  .oauth2-scope-summary-label {
+  .oauth2-scope-summary-label, .fedcred-summary-label {
     flex: 1;
     min-width: 0;
     overflow: hidden;
@@ -372,14 +399,14 @@ export function getHtml(
     font-family: var(--vscode-editor-font-family, monospace);
     font-size: 0.9em;
   }
-  .oauth2-scope-body {
+  .oauth2-scope-body, .fedcred-body {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px 16px;
     padding: 4px 12px 14px;
     border-top: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
   }
-  .oauth2-scope-body label {
+  .oauth2-scope-body label, .fedcred-body label {
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -387,7 +414,7 @@ export function getHtml(
     font-weight: 600;
     font-size: 0.85em;
   }
-  .oauth2-scope-body label > input, .oauth2-scope-body label > select {
+  .oauth2-scope-body label > input, .oauth2-scope-body label > select, .fedcred-body label > input {
     font-weight: normal;
     font-size: 1em;
   }
@@ -884,7 +911,10 @@ export function getHtml(
     }
 
     document.querySelectorAll('.remove-row-btn').forEach(function (btn) {
-      onRemoveClick(btn.closest('.row'));
+      // The oauth2-scope-card / fedcred-card entries are collapsible details elements, not rows —
+      // matching only .row here would hand onRemoveClick a null and throw, halting the rest of
+      // this script's setup (which is what broke every "+ Add ..." button once those cards existed).
+      onRemoveClick(btn.closest('.row, .oauth2-scope-card, .fedcred-card'));
     });
     document.getElementById('addVariableBtn').addEventListener('click', addVariableRow);
     document.getElementById('addEnvironmentBtn').addEventListener('click', addEnvironmentRow);
@@ -961,7 +991,7 @@ export function getHtml(
           userConsentDescription: row.querySelector('.oauth2-scope-userConsentDescription').value,
         };
       });
-      const federatedCredentials = Array.from(document.querySelectorAll('.fedcred-row')).map(function (row) {
+      const federatedCredentials = Array.from(document.querySelectorAll('.fedcred-card')).map(function (row) {
         return {
           name: row.querySelector('.fedcred-name').value,
           issuer: row.querySelector('.fedcred-issuer').value,

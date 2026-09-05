@@ -272,7 +272,8 @@ These came out of an explicit planning pass with the user and should not be sile
   fields matching Graph's `permissionScope` type exactly, one row per scope, no
   flatten/regroup needed since it's already a flat Graph array) — delegated scopes this application
   *exposes*, rather than what it requests. Each scope renders as its own collapsible `<details>`
-  card (`oauth2PermissionScopeRowsHtml()`), not a single-line row like this section's siblings — one
+  card (`oauth2PermissionScopeRowsHtml()`), not a single-line row like the rest of this form's
+  dynamic lists (Federated Credentials below got the same treatment, for the same reason) — one
   scope has eight fields, several of them long free-text descriptions, so a flat row would wrap
   unreadably. Collapsed is the default for a scope loaded from disk (no `open` attribute); a scope
   added via **+ Add scope** starts expanded instead (`addOauth2ScopeRow()` sets `.open = true`),
@@ -329,6 +330,10 @@ These came out of an explicit planning pass with the user and should not be sile
   `FederatedCredentials.yaml.j2` is a dynamic list of `name`/`issuer`/`subject`/`description` fields
   per credential, with `audiences` (a Graph list, but almost always single-valued) edited as one
   comma-separated text field, split/joined programmatically rather than as a nested list-of-lists.
+  Each credential gets the same collapsible-`<details>`-card treatment as Exposed API scopes above,
+  and for the same reason (`federatedCredentialRowsHtml()`/`addFedCredRow()`) — collapsed by default
+  when loaded, expanded when newly added, `<summary>` showing a live `Name — Subject` label
+  (`fedcredSummaryLabel()`/`refreshFedCredSummaries()`, the same server/client-duplicated pattern).
   `ServicePrincipal.yaml.j2` is `appId`/`appRoleAssignmentRequired` (checkbox)/a dynamic `tags` list.
   The Tags area also shows a **read-only, display-only** "Generated tags" preview — four tags
   (`AppName:<Environment>_<businessUnit>_<appName>`, `Environment:{{Environment}}`, `<appName>`,
