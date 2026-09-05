@@ -1,14 +1,18 @@
 application_name: sample-api
 business_unit: Funds
-Variables:
+Variables: &DefaultVariables
   owner_email: platform-team@example.com
-Environments:
+Environments: 
   - name: Dev
     publisherDomain: contoso-dev.onmicrosoft.com
     tenancy_type: workforce
     environment_code: dev
+    Variables: 
+      <<: *DefaultVariables
   - name: Prod
     publisherDomain: contoso.onmicrosoft.com
     tenancy_type: workforce
     environment_code: prod
+    Variables: 
+      <<: *DefaultVariables
 Dependencies: {}
