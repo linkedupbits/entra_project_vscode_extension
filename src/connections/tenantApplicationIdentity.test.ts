@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseTenantApplicationIdentity } from './tenantApplicationIdentity';
+import { parseTenantApplicationIdentity, hasEnvironmentTag } from './tenantApplicationIdentity';
 
 describe('parseTenantApplicationIdentity', () => {
   it('parses a well-formed AppName tag', () => {
@@ -40,5 +40,27 @@ describe('parseTenantApplicationIdentity', () => {
 
   it('does not match a tag that merely contains "AppName:" without starting with it', () => {
     expect(parseTenantApplicationIdentity(['Prefix:AppName:dev_BU_app'])).toBeUndefined();
+  });
+});
+
+describe('hasEnvironmentTag', () => {
+  it('returns true when a tag starts with "Environment:"', () => {
+    expect(hasEnvironmentTag(['AppName:dev_BU_app', 'Environment:dev'])).toBe(true);
+  });
+
+  it('returns true even when the tag value is still the unresolved literal placeholder', () => {
+    expect(hasEnvironmentTag(['Environment:{{Environment}}'])).toBe(true);
+  });
+
+  it('returns false when there is no Environment: tag', () => {
+    expect(hasEnvironmentTag(['AppName:dev_BU_app', 'a-custom-tag'])).toBe(false);
+  });
+
+  it('returns false for an empty tags list', () => {
+    expect(hasEnvironmentTag([])).toBe(false);
+  });
+
+  it('does not match a tag that merely contains "Environment:" without starting with it', () => {
+    expect(hasEnvironmentTag(['Prefix:Environment:dev'])).toBe(false);
   });
 });

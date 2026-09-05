@@ -4,7 +4,8 @@ import { ConnectionsBranch, ConnectionTreeItem } from './connections/connections
 import { Connection } from './connections/types';
 import { loadApplicationPreview, ApplicationPreviewData } from './connections/tenantApplicationPreview';
 import { buildApplicationPreviewHtml } from './connections/applicationPreviewHtml';
-import { parseTenantApplicationIdentity, TenantApplicationIdentity } from './connections/tenantApplicationIdentity';
+import { parseTenantApplicationIdentity, ApplicationDownloadTarget } from './connections/tenantApplicationIdentity';
+import { promptForApplicationName } from './connections/promptForApplicationName';
 import { downloadApplicationToProject } from './connections/downloadApplicationToProject';
 import { ProjectBranch } from './project/projectBranch';
 import { ApplicationsBranch } from './applications/applicationsBranch';
@@ -98,8 +99,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // UC034 — the currently implemented instance of UC032's generic artifact preview, scoped to
     // an Applications-category artifact reached via UC030. Structured, read-only, mirroring
-    // UC042's local editor layout (Application/Federated Credentials/Service Principal). Offers a
-    // Download button (UC035) when the Service Principal's tags carry a parseable AppName: tag.
+    // UC042's local editor layout (Application/Federated Credentials/Service Principal). Always
+    // offers a Download button (UC035); if no AppName: tag can be parsed, UC035 A4's wizard asks
+    // for an application name instead of refusing to download.
     vscode.commands.registerCommand(
       'entra.previewArtifact',
       async (item: { connection: Connection; application: GraphApplication }) => {
@@ -109,16 +111,12 @@ export function activate(context: vscode.ExtensionContext): void {
             { location: vscode.ProgressLocation.Notification, title: `Loading "${label}"…` },
             async () => {
               const data = await loadApplicationPreview(authService, item.connection, item.application);
-              const identity =
-                data.servicePrincipal.kind === 'ok'
-                  ? parseTenantApplicationIdentity(data.servicePrincipal.value.tags)
-                  : undefined;
               ArtifactViewerPanel.show(
                 `${item.connection.name}::${item.application.id}`,
                 label,
                 `Connection: ${item.connection.name}`,
                 buildApplicationPreviewHtml(data),
-                identity ? () => downloadApplicationPreview(label, identity, data) : undefined
+                () => downloadApplicationPreview(label, item.connection, data)
               );
             }
           );
@@ -134,22 +132,31 @@ export function activate(context: vscode.ExtensionContext): void {
   // UC035 — the currently implemented instance of UC031's generic download, scoped to Applications:
   // captures the previewed application into `<artifactsRoot>/applications/<appName>/`, identified
   // by the AppName: tag rather than a flat downloaded-artifact snapshot (see UC040's open question
-  // this resolves for Applications specifically).
+  // this resolves for Applications specifically). Falls back to UC035 A4's wizard when no tag is
+  // present, rather than refusing to download.
   async function downloadApplicationPreview(
     label: string,
-    identity: TenantApplicationIdentity,
+    connection: Connection,
     data: ApplicationPreviewData
   ): Promise<void> {
+    const tags = data.servicePrincipal.kind === 'ok' ? data.servicePrincipal.value.tags : [];
+    let identity: ApplicationDownloadTarget | undefined = parseTenantApplicationIdentity(tags);
+    if (!identity) {
+      const appName = await promptForApplicationName();
+      if (!appName) {
+        return;
+      }
+      identity = { appName };
+    }
+
     try {
       const result = await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: `Downloading "${label}"…` },
-        () => downloadApplicationToProject(applicationStore, identity, data)
+        () => downloadApplicationToProject(applicationStore, identity!, data, connection)
       );
       if (result.kind === 'ok') {
         treeProvider.refresh();
-        void vscode.window.showInformationMessage(
-          `Downloaded "${label}" to applications/${identity.appName}.`
-        );
+        void vscode.window.showInformationMessage(`Downloaded "${label}" to applications/${identity!.appName}.`);
       } else if (result.kind === 'noWorkspace') {
         void vscode.window.showErrorMessage('Open a workspace folder before downloading an application.');
       } else {

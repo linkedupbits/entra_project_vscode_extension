@@ -67,6 +67,36 @@ describe('loadApplicationPreview', () => {
     });
   });
 
+  it("captures the raw application's publisherDomain field alongside the normalized fields", async () => {
+    vi.mocked(getApplication).mockResolvedValueOnce({ displayName: 'My App', publisherDomain: 'contoso.onmicrosoft.com' });
+    vi.mocked(listFederatedIdentityCredentials).mockResolvedValueOnce([]);
+    vi.mocked(getServicePrincipalByAppId).mockResolvedValueOnce(undefined);
+
+    const result = await loadApplicationPreview(fakeAuth(), connection, application);
+
+    expect(result.applicationPublisherDomain).toBe('contoso.onmicrosoft.com');
+  });
+
+  it('defaults applicationPublisherDomain to an empty string when the field is absent', async () => {
+    vi.mocked(getApplication).mockResolvedValueOnce({ displayName: 'My App' });
+    vi.mocked(listFederatedIdentityCredentials).mockResolvedValueOnce([]);
+    vi.mocked(getServicePrincipalByAppId).mockResolvedValueOnce(undefined);
+
+    const result = await loadApplicationPreview(fakeAuth(), connection, application);
+
+    expect(result.applicationPublisherDomain).toBe('');
+  });
+
+  it('defaults applicationPublisherDomain to an empty string when the application fetch itself failed', async () => {
+    vi.mocked(getApplication).mockRejectedValueOnce(new Error('boom'));
+    vi.mocked(listFederatedIdentityCredentials).mockResolvedValueOnce([]);
+    vi.mocked(getServicePrincipalByAppId).mockResolvedValueOnce(undefined);
+
+    const result = await loadApplicationPreview(fakeAuth(), connection, application);
+
+    expect(result.applicationPublisherDomain).toBe('');
+  });
+
   it('normalizes a missing service principal (undefined) to empty defaults rather than erroring', async () => {
     vi.mocked(getApplication).mockResolvedValueOnce({});
     vi.mocked(listFederatedIdentityCredentials).mockResolvedValueOnce([]);

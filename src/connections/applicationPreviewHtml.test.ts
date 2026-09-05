@@ -8,6 +8,7 @@ function data(overrides: Partial<ApplicationPreviewData> = {}): ApplicationPrevi
       kind: 'ok',
       value: { displayName: 'My App', signInAudience: 'AzureADMyOrg', redirectUris: [], requiredPermissions: [] },
     },
+    applicationPublisherDomain: '',
     federatedCredentials: { kind: 'ok', value: [] },
     servicePrincipal: { kind: 'ok', value: { appId: '', appRoleAssignmentRequired: false, tags: [] } },
     ...overrides,

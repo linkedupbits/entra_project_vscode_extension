@@ -62,12 +62,12 @@ environments, or dependencies to show).
      `displayName`, which Graph itself doesn't enforce as unique. Shown as an explicit "No unique
      name tag found" state, not omitted, when the Service Principal has no such tag or its section
      failed to load (see `tenantApplicationIdentity.ts`'s `parseTenantApplicationIdentity()`).
-   * If a unique name was found, the panel also shows a **Download to project** button — see
+   * The panel always shows a **Download to project** button — see
      [UC035 — Download an Application Artifact to the Project](UC035_DownloadApplicationArtifact.md).
-     If not, the button is omitted entirely rather than shown disabled, since there would be
-     nothing a disabled state could explain that the "not found" message above it doesn't already.
-5. The user reads the content. The panel has no editable fields, no buttons, and no path back to
-   the tenant or to a local file — it is a viewer only.
+     When no unique name was found, selecting it prompts for an application name instead of
+     downloading immediately (UC035 A4) rather than the button being omitted or disabled.
+5. The user reads the content. Aside from that one Download button, the panel has no editable
+   fields and no other path back to the tenant or to a local file — it is a viewer only.
 6. Selecting the same application again while its panel is still open brings that existing panel
    forward (and refreshes its content with fresh Graph fetches) rather than opening a duplicate,
    keyed by connection name + object ID.
@@ -119,9 +119,10 @@ environments, or dependencies to show).
   unimplemented, so there's nothing else to preview yet.
 
 A "Download" action from the panel *is* implemented — see
-[UC035](UC035_DownloadApplicationArtifact.md) — but only when a unique-name tag is present; UC031's
-generic (and structurally different) flat-snapshot download remains unimplemented for every
-category, Applications included.
+[UC035](UC035_DownloadApplicationArtifact.md) — always available, prompting for an application
+name when no unique-name tag is present (UC035 A4) rather than requiring one. UC031's generic (and
+structurally different) flat-snapshot download remains unimplemented for every category,
+Applications included.
 
 ## Related
 
@@ -130,4 +131,4 @@ category, Applications included.
 * [UC031 — Download Artifact](UC031_DownloadArtifact.md) — the deferred next step.
 * [UC033 — View Local Project Artifacts](UC033_ViewLocalProjectArtifacts.md) — the deferred local-file side of the shared viewer.
 * [UC042 — View Application Details](../UC400_ApplicationManagement/UC042_ViewApplicationDetails.md) — the local, editable counterpart whose field layout and normalization logic this preview reuses.
-* [UC035 — Download an Application Artifact to the Project](UC035_DownloadApplicationArtifact.md) — the Download button this preview's panel offers when a unique name is found.
+* [UC035 — Download an Application Artifact to the Project](UC035_DownloadApplicationArtifact.md) — the Download button this preview's panel always offers.

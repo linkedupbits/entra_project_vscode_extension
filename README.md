@@ -35,9 +35,9 @@ Not all of the above is implemented yet — check before relying on this summary
   application's four files; and, for a connected connection, an **Applications** folder listing
   its live App Registrations via Graph, each selectable for a read-only, structured preview
   (Application / Federated Credentials / Service Principal) mirroring the local editor's layout,
-  plus a **Download to project** button when the tenant's Service Principal carries an `AppName:`
-  identifying tag — this seeds or updates the matching local application-definition folder rather
-  than writing a flat downloaded-artifact snapshot.
+  plus a **Download to project** button (asking for an application name if the tenant's Service
+  Principal has no `AppName:` identifying tag) that seeds or updates the matching local
+  application-definition folder rather than writing a flat downloaded-artifact snapshot.
 - **Not yet implemented**: the other tenant artifact categories (Service Principals, Groups,
   Directory Roles, External ID user flows/custom auth extensions), the flat downloaded-artifact
   snapshot format for any category, comparing a preview with a local file, and actually

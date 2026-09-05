@@ -283,24 +283,42 @@ These came out of an explicit planning pass with the user and should not be sile
   underscore-separated parts, returning `undefined` rather than guessing on anything else (a
   malformed match would silently target the wrong folder on download, worse than refusing).
   `applicationPreviewHtml.ts` calls it to render UC034's **Unique name** line (an explicit
-  "not found" state, never silently omitted). `entra.previewArtifact` in `extension.ts` calls it
-  again on the fetched Service Principal's tags to decide whether to pass an `onDownload` callback
-  into `ArtifactViewerPanel.show()` — the shell only renders its Download button when one is
-  supplied, so "no unique name" means no button, not a disabled one (there's nothing a disabled
-  state would explain that the Unique name line's own message doesn't already). The callback calls
-  `connections/downloadApplicationToProject.ts`'s `downloadApplicationToProject()`, which — this
-  was the one significant design decision in this feature — does **not** write a flat
-  downloaded-artifact snapshot (UC020/UC031's shape). It instead seeds/merges into the *existing*
-  `ApplicationStore`-managed folder for `<AppName>` (UC040), non-destructively:
-  `ApplicationStore.existingTemplateFiles()` (a new method, reading the directory listing rather
-  than adding a new `stat`-based mock surface) tells it which of the three `.yaml.j2` files already
-  exist, and only a missing one is written from the previewed data — an existing one is assumed to
-  be a hand-authored Nunjucks template and is never touched. `AppConfig.yaml`'s `business_unit` is
-  filled in only if blank, and an `Environments` entry for the parsed environment is appended only
-  if no entry already has that `environment_code`. Requires all three of UC034's sections to have
-  loaded successfully (`kind: 'ok'`) — refuses to download, rather than writing a misleadingly
-  empty file, if any one failed. `tenantApplicationIdentity.ts` and `downloadApplicationToProject.ts`
-  are both genuinely unit-tested, not glue.
+  "not found" state, never silently omitted).
+
+  The Download button in `ArtifactViewerPanel` is **always** shown now (its `onDownload` callback
+  parameter is no longer conditional on a parsed identity) — `entra.previewArtifact` in
+  `extension.ts` calls `parseTenantApplicationIdentity()` on click, and if it returns `undefined`,
+  falls back to `promptForApplicationName()` (UC035 A4, a thin but genuinely unit-tested
+  `showInputBox` wrapper, same pattern as `resolveConnectionArg.ts`) rather than refusing. That
+  fallback only ever collects `appName`; `tenantApplicationIdentity.ts`'s `ApplicationDownloadTarget`
+  type (broader than `TenantApplicationIdentity`: `environment`/`businessUnit` optional) is what
+  `downloadApplicationToProject()` actually accepts, so it can skip the AppConfig.yaml
+  business_unit/Environments merge steps cleanly when those two are unknown rather than writing
+  guessed values.
+
+  `downloadApplicationToProject()` — the one significant design decision in this feature — does
+  **not** write a flat downloaded-artifact snapshot (UC020/UC031's shape). It instead seeds/merges
+  into the *existing* `ApplicationStore`-managed folder for `<AppName>` (UC040), non-destructively:
+  `ApplicationStore.existingTemplateFiles()` (reads the directory listing rather than adding a new
+  `stat`-based mock surface) tells it which of the three `.yaml.j2` files already exist, and only a
+  missing one is written from the previewed data — an existing one is assumed to be a hand-authored
+  Nunjucks template and is never touched. Before writing a new `ServicePrincipal.yaml.j2`, its
+  `tags` are filtered through `stripGeneratedTags()`, which drops anything matching
+  `applicationFormLogic.ts`'s now-exported `reservedTagPrefixFor()` (`AppName:`/`Environment:`/
+  `BusinessUnit:`) plus an exact match on the bare app name (the fourth generated tag) — without
+  this, a downloaded file would immediately fail that same file's own reserved-prefix validation
+  the next time it's opened in UC042 and saved. When appending a new `Environments` entry, its
+  `publisherDomain`/`tenancy_type` are populated from the connection/fetched application (see
+  `tenancyTypeFor()`: `externalId` → `'ciam'`, else `'workforce'`) only if the Service Principal
+  also carries a separate `Environment:` tag (`hasEnvironmentTag()`, presence-only — its value may
+  still be the unresolved `{{Environment}}` placeholder) — otherwise left blank, unchanged from
+  before this enrichment existed. `publisherDomain` itself comes from the raw application object's
+  own Graph `publisherDomain` field, captured by `tenantApplicationPreview.ts` as
+  `ApplicationPreviewData.applicationPublisherDomain` since `ApplicationFields`/UC042 don't model
+  it. Requires all three of UC034's sections to have loaded successfully (`kind: 'ok'`) — refuses
+  to download, rather than writing a misleadingly empty file, if any one failed.
+  `tenantApplicationIdentity.ts`, `promptForApplicationName.ts`, and
+  `downloadApplicationToProject.ts` are all genuinely unit-tested, not glue.
 - **Extension host**: must run in the Node extension host, not as a web extension — MSAL's loopback
   listener and local filesystem access both require Node APIs.
 - **Shared artifact viewer**: one webview component renders an artifact regardless of whether it

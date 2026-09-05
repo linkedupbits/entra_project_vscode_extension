@@ -14,12 +14,24 @@ export type SectionResult<T> = { kind: 'ok'; value: T } | { kind: 'error'; messa
 
 export interface ApplicationPreviewData {
   application: SectionResult<ApplicationFields>;
+  /**
+   * Graph's `application.publisherDomain` field, read directly off the raw fetch result — not
+   * modelled by `ApplicationFields`/UC042 (a local application definition has no such concept),
+   * kept only for `downloadApplicationToProject()` to seed a new Environment entry's
+   * `publisherDomain` from (see UC035 A5). Blank if the application section itself failed to load
+   * or the field was absent.
+   */
+  applicationPublisherDomain: string;
   federatedCredentials: SectionResult<FederatedCredentialEntry[]>;
   servicePrincipal: SectionResult<ServicePrincipalFields>;
 }
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function asString(value: unknown): string {
+  return typeof value === 'string' ? value : '';
 }
 
 /**
@@ -53,6 +65,8 @@ export async function loadApplicationPreview(
       applicationResult.status === 'fulfilled'
         ? { kind: 'ok', value: normalizeApplicationFields(applicationResult.value) }
         : { kind: 'error', message: errorMessage(applicationResult.reason) },
+    applicationPublisherDomain:
+      applicationResult.status === 'fulfilled' ? asString(applicationResult.value.publisherDomain) : '',
     federatedCredentials:
       federatedCredentialsResult.status === 'fulfilled'
         ? { kind: 'ok', value: normalizeFederatedCredentials(federatedCredentialsResult.value) }

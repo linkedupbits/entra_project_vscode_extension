@@ -84,9 +84,15 @@ export type ApplicationSubmitResolution =
  * `updateGeneratedTags()`) — reserved so a custom tag can never collide with, or be mistaken for,
  * one of those deploy-time-applied tags. Case-sensitive, matching the preview's own casing exactly.
  */
-const RESERVED_TAG_PREFIXES: readonly string[] = ['AppName:', 'Environment:', 'BusinessUnit:'];
+/**
+ * Exported so `downloadApplicationToProject.ts` can strip these same generated tags out of a
+ * tenant Service Principal's real tags before saving them locally — otherwise a downloaded
+ * `ServicePrincipal.yaml.j2` would fail this very validation the next time it's opened in UC042's
+ * editor and saved.
+ */
+export const RESERVED_TAG_PREFIXES: readonly string[] = ['AppName:', 'Environment:', 'BusinessUnit:'];
 
-function reservedTagPrefixFor(tag: string): string | undefined {
+export function reservedTagPrefixFor(tag: string): string | undefined {
   return RESERVED_TAG_PREFIXES.find((prefix) => tag.startsWith(prefix));
 }
 
