@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { listApplications, getApplication } from './graphClient';
+import { listApplications, getApplication, listFederatedIdentityCredentials, getServicePrincipalByAppId } from './graphClient';
 
 function jsonResponse(body: unknown, ok = true, status = 200, statusText = 'OK'): Response {
   return {
@@ -173,6 +173,152 @@ describe('getApplication', () => {
 
     await expect(getApplication('a-token', 'public', 'obj-1')).rejects.toThrow(
       /Microsoft Graph returned 500 Internal Server Error fetching application "obj-1"\.$/
+    );
+  });
+});
+
+describe('listFederatedIdentityCredentials', () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    global.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('requests the credentials nested under the application, with a bearer token', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ value: [] }));
+
+    await listFederatedIdentityCredentials('a-token', 'public', 'obj-1');
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://graph.microsoft.com/v1.0/applications/obj-1/federatedIdentityCredentials',
+      { headers: { Authorization: 'Bearer a-token' } }
+    );
+  });
+
+  it('URL-encodes the application ID', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ value: [] }));
+
+    await listFederatedIdentityCredentials('a-token', 'public', 'obj/1');
+
+    expect(vi.mocked(global.fetch).mock.calls[0][0]).toBe(
+      'https://graph.microsoft.com/v1.0/applications/obj%2F1/federatedIdentityCredentials'
+    );
+  });
+
+  it('returns raw entries unmodified (normalization happens elsewhere)', async () => {
+    const entry = { name: 'dev-deploy', issuer: 'https://token.actions.githubusercontent.com' };
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ value: [entry] }));
+
+    const result = await listFederatedIdentityCredentials('a-token', 'public', 'obj-1');
+
+    expect(result).toEqual([entry]);
+  });
+
+  it('follows @odata.nextLink until it is absent, concatenating every page', async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          value: [{ name: 'a' }],
+          '@odata.nextLink': 'https://graph.microsoft.com/v1.0/applications/obj-1/federatedIdentityCredentials?$skiptoken=abc',
+        })
+      )
+      .mockResolvedValueOnce(jsonResponse({ value: [{ name: 'b' }] }));
+
+    const result = await listFederatedIdentityCredentials('a-token', 'public', 'obj-1');
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(result).toEqual([{ name: 'a' }, { name: 'b' }]);
+  });
+
+  it('throws with the status and body when Graph returns a non-OK response', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ error: { message: 'boom' } }, false, 403, 'Forbidden'));
+
+    await expect(listFederatedIdentityCredentials('a-token', 'public', 'obj-1')).rejects.toThrow(
+      /Microsoft Graph returned 403 Forbidden listing federated identity credentials for application "obj-1"/
+    );
+  });
+
+  it('still throws a useful error when the error response body cannot be read', async () => {
+    const response = {
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      text: async () => {
+        throw new Error('stream already consumed');
+      },
+    } as unknown as Response;
+    vi.mocked(global.fetch).mockResolvedValueOnce(response);
+
+    await expect(listFederatedIdentityCredentials('a-token', 'public', 'obj-1')).rejects.toThrow(
+      /Microsoft Graph returned 500 Internal Server Error listing federated identity credentials for application "obj-1"\.$/
+    );
+  });
+});
+
+describe('getServicePrincipalByAppId', () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    global.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('filters by appId, with a bearer token', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ value: [] }));
+
+    await getServicePrincipalByAppId('a-token', 'public', 'app-1');
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      "https://graph.microsoft.com/v1.0/servicePrincipals?$filter=appId%20eq%20'app-1'",
+      { headers: { Authorization: 'Bearer a-token' } }
+    );
+  });
+
+  it('returns the first matching service principal', async () => {
+    const sp = { id: 'sp-1', appId: 'app-1', appRoleAssignmentRequired: true };
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ value: [sp] }));
+
+    const result = await getServicePrincipalByAppId('a-token', 'public', 'app-1');
+
+    expect(result).toEqual(sp);
+  });
+
+  it('returns undefined when no service principal exists for the appId', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ value: [] }));
+
+    const result = await getServicePrincipalByAppId('a-token', 'public', 'app-1');
+
+    expect(result).toBeUndefined();
+  });
+
+  it('throws with the status and body when Graph returns a non-OK response', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ error: { message: 'boom' } }, false, 403, 'Forbidden'));
+
+    await expect(getServicePrincipalByAppId('a-token', 'public', 'app-1')).rejects.toThrow(
+      /Microsoft Graph returned 403 Forbidden looking up the service principal for appId "app-1"/
+    );
+  });
+
+  it('still throws a useful error when the error response body cannot be read', async () => {
+    const response = {
+      ok: false,
+      status: 500,
+      statusText: 'Internal Server Error',
+      text: async () => {
+        throw new Error('stream already consumed');
+      },
+    } as unknown as Response;
+    vi.mocked(global.fetch).mockResolvedValueOnce(response);
+
+    await expect(getServicePrincipalByAppId('a-token', 'public', 'app-1')).rejects.toThrow(
+      /Microsoft Graph returned 500 Internal Server Error looking up the service principal for appId "app-1"\.$/
     );
   });
 });

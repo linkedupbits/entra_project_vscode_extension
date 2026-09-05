@@ -69,3 +69,58 @@ export async function getApplication(accessToken: string, cloud: Cloud, id: stri
   delete application['@odata.context'];
   return application;
 }
+
+/**
+ * UC034 — lists an application's federated identity credentials, following `@odata.nextLink` the
+ * same way listApplications() does. Graph typically returns very few per application, but paging
+ * is still handled for correctness rather than assuming that always holds.
+ */
+export async function listFederatedIdentityCredentials(
+  accessToken: string,
+  cloud: Cloud,
+  applicationId: string
+): Promise<unknown[]> {
+  const entries: unknown[] = [];
+  let url: string | undefined =
+    `https://${GRAPH_HOST[cloud]}/v1.0/applications/${encodeURIComponent(applicationId)}/federatedIdentityCredentials`;
+
+  while (url) {
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(
+        `Microsoft Graph returned ${response.status} ${response.statusText} listing federated identity credentials for application "${applicationId}"` +
+          (body ? `: ${body}` : '.')
+      );
+    }
+    const page = (await response.json()) as GraphListResponse<unknown>;
+    entries.push(...page.value);
+    url = page['@odata.nextLink'];
+  }
+
+  return entries;
+}
+
+/**
+ * UC034 — looks up the Enterprise Application (Service Principal) for an App Registration's
+ * appId. Returns undefined if none exists — a valid, if unusual, state: a Service Principal isn't
+ * created automatically alongside every Application.
+ */
+export async function getServicePrincipalByAppId(
+  accessToken: string,
+  cloud: Cloud,
+  appId: string
+): Promise<Record<string, unknown> | undefined> {
+  const filter = encodeURIComponent(`appId eq '${appId}'`);
+  const url = `https://${GRAPH_HOST[cloud]}/v1.0/servicePrincipals?$filter=${filter}`;
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(
+      `Microsoft Graph returned ${response.status} ${response.statusText} looking up the service principal for appId "${appId}"` +
+        (body ? `: ${body}` : '.')
+    );
+  }
+  const page = (await response.json()) as GraphListResponse<Record<string, unknown>>;
+  return page.value[0];
+}

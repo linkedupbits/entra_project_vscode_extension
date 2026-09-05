@@ -247,19 +247,33 @@ These came out of an explicit planning pass with the user and should not be sile
   Roles, External ID User Flows/Custom Authentication Extensions), throttling retry, and
   per-category 403 handling are not implemented — don't assume `ConnectionsBranch` has any of that
   just because Applications works.
-- **Application artifact preview (UC034, the implemented instance of UC032)**: clicking a
-  `TenantApplicationItem` runs `entra.previewArtifact`, which calls `graphClient.ts`'s
-  `getApplication()` (a full `GET /v1.0/applications/{id}`, unlike `listApplications()`'s
-  field-limited list call — `@odata.context` is stripped since it's response-shape metadata, not
-  part of the application) and shows the result as YAML in `webview/artifactViewerPanel.ts`'s
-  `ArtifactViewerPanel`, keyed by `<connection name>::<object id>` so re-selecting the same
-  application reveals/refreshes its existing panel rather than opening a duplicate. This panel is
-  intentionally inert — no scripts, no buttons, no message-passing — since UC032 requires the
-  viewer be read-only "by construction," not merely by omitting an edit affordance in the UI. It
-  does not yet build the `_meta` block UC020/UC032 describe, offer "Compare with local file," or
-  support any artifact category besides Applications — see UC034 for the full list of what's
-  deferred and why. `artifactViewerPanel.ts` is excluded from coverage as thin webview glue, same
-  as `connectionFormPanel.ts`/`applicationFormPanel.ts`.
+- **Application artifact preview (UC034, the implemented instance of UC032), structured to match
+  UC042**: clicking a `TenantApplicationItem` runs `entra.previewArtifact`, which calls
+  `connections/tenantApplicationPreview.ts`'s `loadApplicationPreview()` — three independent Graph
+  calls via `Promise.allSettled` (`graphClient.ts`'s `getApplication()`,
+  `listFederatedIdentityCredentials()`, `getServicePrincipalByAppId()`, the last looked up by
+  `appId` via `$filter`, since Graph doesn't nest a Service Principal under its Application), each
+  normalized through the *same* `applications/types.ts` functions (`normalizeApplicationFields()`,
+  `normalizeFederatedCredentials()`, `normalizeServicePrincipalFields()`) UC042's local editor
+  already uses — deliberate reuse, not a parallel implementation, so a tenant application and a
+  local one are guaranteed the same field mapping and the same unmodelled-field limitations
+  (`identifierUris`, `appRoles`, etc. — see UC034). A failure in any one of the three calls (a
+  rejected `Promise.allSettled` entry) becomes that section's own `{ kind: 'error', message }`
+  rather than failing the other two — only a failure acquiring the access token itself (before any
+  of the three calls) aborts the whole preview. `connections/applicationPreviewHtml.ts`'s
+  `buildApplicationPreviewHtml()` (a pure function, genuinely unit-tested — not glue) renders the
+  three sections read-only (labels/lists, no inputs), and `webview/artifactViewerPanel.ts`'s
+  `ArtifactViewerPanel` is now a reusable **shell** (title/badge/hint chrome plus shared CSS) that
+  takes arbitrary caller-built `bodyHtml` — it no longer assumes YAML-in-a-`<pre>`, so a future
+  artifact type can supply its own structured body through the same shell. The panel itself stays
+  intentionally inert (no scripts, no buttons, no message-passing), keyed by
+  `<connection name>::<object id>` so re-selecting the same application reveals/refreshes its
+  existing panel rather than opening a duplicate. `artifactViewerPanel.ts` is excluded from
+  coverage as thin webview glue, same as `connectionFormPanel.ts`/`applicationFormPanel.ts` — but
+  `tenantApplicationPreview.ts` and `applicationPreviewHtml.ts` are not, since they hold real logic
+  (the per-section failure isolation, the field rendering) rather than VS Code wiring. Still not
+  built: the `_meta` block UC020/UC032 describe, "Compare with local file," a "Download" action, or
+  support for any artifact category besides Applications — see UC034 for the full list.
 - **Extension host**: must run in the Node extension host, not as a web extension — MSAL's loopback
   listener and local filesystem access both require Node APIs.
 - **Shared artifact viewer**: one webview component renders an artifact regardless of whether it

@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
-import * as YAML from 'yaml';
 import { ConnectionStore } from './connections/connectionStore';
 import { ConnectionsBranch, ConnectionTreeItem } from './connections/connectionsBranch';
 import { Connection } from './connections/types';
+import { loadApplicationPreview } from './connections/tenantApplicationPreview';
+import { buildApplicationPreviewHtml } from './connections/applicationPreviewHtml';
 import { ProjectBranch } from './project/projectBranch';
 import { ApplicationsBranch } from './applications/applicationsBranch';
 import { ApplicationStore } from './applications/applicationStore';
@@ -12,7 +13,7 @@ import { AuthService } from './auth/authService';
 import { CredentialStore } from './auth/credentialStore';
 import { ConnectionFormPanel } from './connections/connectionFormPanel';
 import { resolveConnectionArg } from './connections/resolveConnectionArg';
-import { GraphApplication, getApplication } from './graph/graphClient';
+import { GraphApplication } from './graph/graphClient';
 import { ArtifactViewerPanel } from './webview/artifactViewerPanel';
 import { registerStatusBar } from './statusBar';
 
@@ -94,7 +95,8 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     // UC034 — the currently implemented instance of UC032's generic artifact preview, scoped to
-    // an Applications-category artifact reached via UC030.
+    // an Applications-category artifact reached via UC030. Structured, read-only, mirroring
+    // UC042's local editor layout (Application/Federated Credentials/Service Principal).
     vscode.commands.registerCommand(
       'entra.previewArtifact',
       async (item: { connection: Connection; application: GraphApplication }) => {
@@ -103,13 +105,12 @@ export function activate(context: vscode.ExtensionContext): void {
           await vscode.window.withProgress(
             { location: vscode.ProgressLocation.Notification, title: `Loading "${label}"…` },
             async () => {
-              const accessToken = await authService.getGraphAccessToken(item.connection);
-              const fullApplication = await getApplication(accessToken, item.connection.cloud, item.application.id);
+              const data = await loadApplicationPreview(authService, item.connection, item.application);
               ArtifactViewerPanel.show(
                 `${item.connection.name}::${item.application.id}`,
                 label,
                 `Connection: ${item.connection.name}`,
-                YAML.stringify(fullApplication)
+                buildApplicationPreviewHtml(data)
               );
             }
           );

@@ -10,6 +10,16 @@ block, "Compare with local file") this use case doesn't implement yet; this docu
 only what actually happens for an application, and exists separately so UC032 isn't rewritten to
 describe one category's specifics while still standing for the general case.
 
+The preview is **structured**, not a raw data dump: it shows the same three sections —
+Application (App Registration), Federated Credentials, Service Principal — that
+[UC042 — View Application Details](../UC400_ApplicationManagement/UC042_ViewApplicationDetails.md)
+shows for a *local* application definition, using the exact same field normalization
+(`applications/types.ts`), so a tenant application and a local one look and are organized
+identically. Unlike UC042, this view has no inputs, no add/remove controls, and no Save action —
+it is read-only by construction (UC032's requirement), and unlike a local application definition,
+a live tenant application has no `AppConfig.yaml` equivalent (no business unit, variables,
+environments, or dependencies to show).
+
 ## Actors
 
 * **User**
@@ -23,29 +33,59 @@ describe one category's specifics while still standing for the general case.
 ## Main Flow
 
 1. User selects an application item under a connection's **Applications** folder.
-2. The extension fetches that application's full representation from Microsoft Graph
-   (`GET /v1.0/applications/{id}`) — every field, not just the `id`/`appId`/`displayName` subset
-   UC030's listing call selects — showing a progress notification while the request is in flight.
-   Graph's own `@odata.context` response metadata is stripped before display, since it describes
-   the response shape rather than the application itself.
-3. The extension serializes the result to YAML and shows it in a read-only webview panel
+2. The extension makes three Microsoft Graph calls, showing a progress notification while they're
+   in flight:
+   * `GET /v1.0/applications/{id}` — the application's full representation (every field, not just
+     the `id`/`appId`/`displayName` subset UC030's listing call selects). Graph's own
+     `@odata.context` response metadata is stripped, since it describes the response shape rather
+     than the application itself.
+   * `GET /v1.0/applications/{id}/federatedIdentityCredentials` — the application's federated
+     identity credentials, if any (paged the same way UC030's application listing is, though a
+     typical application has very few).
+   * `GET /v1.0/servicePrincipals?$filter=appId eq '{appId}'` — the Enterprise Application
+     (Service Principal) for this application's `appId`, if one exists.
+3. Each of the three responses is normalized through the same functions
+   [UC042](../UC400_ApplicationManagement/UC042_ViewApplicationDetails.md)'s structured editor
+   uses to read `Application.yaml.j2`, `FederatedCredentials.yaml.j2`, and
+   `ServicePrincipal.yaml.j2` from disk — so identical field mapping (and the same unmodelled-field
+   limitations) applies to both a tenant application and a local one.
+4. The extension shows the three normalized sections — **Application (App Registration)**,
+   **Federated Credentials**, **Service Principal** — in a read-only webview panel
    (`ArtifactViewerPanel`), titled with the application's display name (or its application ID if
-   display name is blank) and badged "Connection: `<connection name>`".
-4. The user reads the content. The panel has no editable fields, no buttons, and no path back to
+   display name is blank) and badged "Connection: `<connection name>`". Each section shows its
+   fields as plain read-only text/lists (not inputs), including an explicit "None" for an empty
+   list (no redirect URIs, no required permissions, no federated credentials, no tags) — never a
+   silently blank section indistinguishable from one that failed to load.
+5. The user reads the content. The panel has no editable fields, no buttons, and no path back to
    the tenant or to a local file — it is a viewer only.
-5. Selecting the same application again while its panel is still open brings that existing panel
-   forward (and refreshes its content with a fresh Graph fetch) rather than opening a duplicate,
+6. Selecting the same application again while its panel is still open brings that existing panel
+   forward (and refreshes its content with fresh Graph fetches) rather than opening a duplicate,
    keyed by connection name + object ID.
 
 ## Alternate Flows
 
-### A1 — Fetch fails
+### A1 — One of the three Graph calls fails
 
-1. Microsoft Graph returns an error (e.g. a transient failure, or a permission the connection's
-   token lacks) while fetching the full object.
+1. Any one of the three calls in step 2 fails independently — including the application fetch
+   itself, not only the federated-credentials or service-principal lookups (e.g. the connection's
+   token lacks the Graph permission for service principals specifically, while application and
+   federated-credential permissions are fine; or a transient failure hits just one of the three
+   calls).
+2. That call's section renders its own inline error message in place of its fields; the other two
+   sections still render normally from their independently-successful calls — a partial failure
+   narrows what's shown, it doesn't block the other two sections. All three calls run
+   independently precisely so this can happen (see `loadApplicationPreview`'s use of
+   `Promise.allSettled`).
+
+### A2 — Acquiring a Graph access token fails
+
+1. The connection's access token can't be acquired at all (e.g. the connection was disconnected
+   between listing and selecting the application) — this happens once, before any of the three
+   Graph calls in step 2 are attempted, since all three need the same token.
 2. The extension shows an error notification naming the application and the underlying message; no
    preview panel is opened (or, if one was already open for a different application, it is left
-   untouched).
+   untouched). Unlike A1, this is "nothing to show at all" rather than a partial failure, since no
+   call was even attempted.
 
 ## Postconditions
 
@@ -57,7 +97,12 @@ describe one category's specifics while still standing for the general case.
 ## Not implemented (deferred to UC032/UC031/UC033 once those exist)
 
 * The `_meta` block (source connection, tenant ID, Graph endpoint/API version, fetch timestamp)
-  UC020/UC032 describe — the preview shows only the raw Graph object.
+  UC020/UC032 describe.
+* Any field the structured sections don't model — the same accepted limitation
+  [UC042](../UC400_ApplicationManagement/UC042_ViewApplicationDetails.md) documents for the local
+  editor (e.g. `identifierUris`, `appRoles`, `web.implicitGrantSettings` on the Application; any
+  Service Principal field beyond `appId`/`appRoleAssignmentRequired`/`tags`) is the same limitation
+  here — a deliberate parity choice with UC042 rather than an oversight, not a raw-data fallback.
 * "Compare with local file" (UC032 A1) — there's no downloaded-artifact concept yet to compare
   against.
 * A "Download" action from the panel (UC031) — downloading isn't implemented.
@@ -70,3 +115,4 @@ describe one category's specifics while still standing for the general case.
 * [UC030 — Browse Tenant Artifacts](UC030_BrowseTenantArtifacts.md) — how the user reaches the previewed item.
 * [UC031 — Download Artifact](UC031_DownloadArtifact.md) — the deferred next step.
 * [UC033 — View Local Project Artifacts](UC033_ViewLocalProjectArtifacts.md) — the deferred local-file side of the shared viewer.
+* [UC042 — View Application Details](../UC400_ApplicationManagement/UC042_ViewApplicationDetails.md) — the local, editable counterpart whose field layout and normalization logic this preview reuses.
