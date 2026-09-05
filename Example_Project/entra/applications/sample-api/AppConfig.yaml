@@ -11,6 +11,7 @@ Environments:
       <<: *DefaultVariables
       owner_email: platformteam2@example.com
       MyScopeId: 58bdbfaf-6627-489e-a2fd-74e62a302809
+      SecondScope: 48460e95-9910-4173-a8ba-4b0e5ba81101
   - name: Prod
     publisherDomain: contoso.onmicrosoft.com
     tenancy_type: workforce
@@ -18,4 +19,5 @@ Environments:
     Variables:
       <<: *DefaultVariables
       MyScopeId: b7e74087-ee36-4fab-94c0-3bee5c5193fe
+      SecondScope: 6e6c4650-f193-4e11-9fc2-41303c2b596e
 Dependencies: {}

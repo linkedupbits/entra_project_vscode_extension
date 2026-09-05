@@ -5,6 +5,7 @@ import { resolveApplicationSubmit, ApplicationFormInput } from './applicationFor
 import { ApplicationFiles } from './types';
 import { buildApplicationDocumentText } from './applicationDocumentContent';
 import { fromApplicationEditorUri } from './applicationEditorUri';
+import { buildPermissionOptionsByResourceAppId } from './permissionIdOptions';
 import { getHtml } from './applicationEditorHtml';
 
 interface EditMessage {
@@ -92,7 +93,13 @@ export class ApplicationEditorProvider implements vscode.CustomEditorProvider<Ap
   private async render(document: ApplicationCustomDocument, panel: vscode.WebviewPanel): Promise<void> {
     const allNames = await this.applicationsBranch.listApplicationNames();
     const dependencyAppOptions = allNames.filter((n) => n !== document.name);
-    panel.webview.html = getHtml(document.name, document.initialFiles, dependencyAppOptions);
+    // A snapshot as of this render — a dependency added in the same editing session won't have
+    // Permission ID options available until the tab is reopened/reverted (see permissionIdOptions.ts).
+    const permissionOptionsByResourceAppId = await buildPermissionOptionsByResourceAppId(
+      this.store,
+      document.initialFiles.appConfig.Dependencies
+    );
+    panel.webview.html = getHtml(document.name, document.initialFiles, dependencyAppOptions, permissionOptionsByResourceAppId);
   }
 
   private async handleMessage(document: ApplicationCustomDocument, message: IncomingMessage): Promise<void> {

@@ -222,6 +222,51 @@ These came out of an explicit planning pass with the user and should not be sile
   plain text with a ⚠ warning icon instead of the dropdown, so a hand-edited value, a reference to a
   since-renamed/removed dependency, or an unmodelled third-party GUID is never silently discarded or
   misrepresented; a freshly added row always starts as a working dropdown.
+  A row's **Permission ID** is also a dropdown (rather than free text), populated from whichever
+  resource that row's `resourceAppId` currently selects — `permissionIdOptions.ts`'s
+  `buildPermissionOptionsByResourceAppId(store, dependencies)` builds one `Record<resourceAppId,
+  PermissionOption[]>` (keyed by the exact string that appears in the `resourceAppId` dropdown, so a
+  lookup needs no re-parsing) covering **both** cases in one pass: Microsoft Graph's options come
+  from `wellKnownPermissions.ts`'s checked-in catalogue (no I/O), each option's `id` its real, fixed
+  Graph permission GUID; each Dependency's options come from actually loading *that other
+  application's own* `Application.yaml.j2` via the same `ApplicationStore` (`store.load()` on
+  `<applications root>/<dependency's AppName>`) and reading its own **Exposed API scopes**
+  (`oauth2PermissionScopes`) — the delegated scopes it exposes, since this schema has no local
+  equivalent of an application-permission Role to offer for a dependency (`appRoles` isn't
+  modelled) — but each such option's `id` is deliberately the scope's own `value` (its name, e.g.
+  `access_as_user`), **not** its GUID: a dependency's scope GUID isn't necessarily fixed at
+  authoring time (it may itself be an `{{ environment.Variables.<key> }}` reference — see
+  `oauth2ScopeIdReference.ts`), so `resourceAccess[].id` can't hardcode it the way it can for Graph;
+  storing the scope's `value` instead defers the actual lookup to deploy time, matching this
+  dependency's *deployed* scope by that `value` — the same deferral `{{
+  dependency_refs.<key>.applicationId }}` already relies on for `resourceAppId` itself. This is
+  computed once per render (`ApplicationEditorProvider.render()`), not
+  recomputed client-side, since it needs real file reads the webview's own script can't do — a
+  dependency added in the same editing session won't have Permission ID options until the tab is
+  reopened/reverted, an accepted, documented limitation. A dependency that fails to load or exposes
+  nothing contributes no options for its resourceAppId rather than breaking the others (a per-item
+  try/catch, not `Promise.allSettled`, since there's no need to inspect individual rejection
+  reasons). `applicationEditorHtml.ts`'s `permissionIdFieldHtml()` (TS, initial render) and its
+  duplicated `permissionIdCellHtml()` (the webview's own JS, since it can't import a TS module)
+  decide dropdown-vs-text per row exactly like `resourceAppId` already does — a blank ID isn't a
+  warning (an unfinished new row), but a non-blank one that doesn't match any *known* option for
+  that resource is. Unlike `resourceAppId`'s Dependency options (which live-refresh from the
+  Dependencies section's own DOM state), a row's Permission ID options only rebuild on that row's own
+  `resourceAppId` `change` event — not on every edit — specifically so rebuilding the Permission ID
+  cell (which can swap between a `<select>` and a text `<input>`) never interrupts someone typing
+  into an unrelated field, or even into that row's *own* Permission ID text-input fallback. That
+  rebuild (`refreshPermissionIdCell()`) always resets the Permission ID to blank rather than
+  re-checking whatever was previously selected/typed against the new resource's options — a Graph
+  GUID and a dependency's scope `value` are different namespaces entirely, so carrying one forward
+  across a resource switch was a real bug (not a deliberate choice): it showed up as a spurious
+  ⚠-flagged raw value the new resource never actually had, rather than a fresh, correct dropdown.
+  Picking a
+  known Permission ID from its dropdown also auto-sets the row's `Type` to that permission's own type
+  (via a `data-type` attribute on each `<option>`) — deliberately not left as a second, independently
+  wrong-able choice, since a real permission's type isn't actually separable from its ID. No network
+  call is involved anywhere in this — UC042 stays entirely local/offline, same as everything else in
+  it; a third-party `resourceAppId` this dropdown doesn't otherwise recognise (see above) simply has
+  no Permission ID options either, falling back to text the same way its own `resourceAppId` does.
   A dynamic **Exposed API scopes** list mirrors Required Permissions in reverse: it edits
   `Application.yaml.j2`'s `api.oauth2PermissionScopes` (`Oauth2PermissionScopeEntry` in `types.ts`,
   fields matching Graph's `permissionScope` type exactly, one row per scope, no

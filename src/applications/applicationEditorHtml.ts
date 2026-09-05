@@ -2,6 +2,7 @@ import * as crypto from 'crypto';
 import { ApplicationFiles, AppConfig, RequiredPermission, Oauth2PermissionScopeEntry, FederatedCredentialEntry } from './types';
 import { MICROSOFT_GRAPH_APP_ID, parseResourceAppId, buildDependencyReference } from './resourceAppIdReference';
 import { parseEnvironmentVariableIdName } from './oauth2ScopeIdReference';
+import { PermissionOption } from './permissionIdOptions';
 
 function getNonce(): string {
   return crypto.randomBytes(16).toString('base64');
@@ -114,12 +115,51 @@ function permissionResourceAppIdOptionsHtml(selected: string, dependencyKeys: re
 }
 
 /**
+ * A Permission ID renders as a dropdown of that resource's known permissions when any are known for
+ * the row's current `resourceAppId` (see `permissionIdOptions.ts` — Microsoft Graph's well-known
+ * catalogue, or a Dependency's own exposed `oauth2PermissionScopes`), selecting the one it currently
+ * matches (by ID); a value that doesn't match any of them is shown as plain text with the same
+ * warning-icon convention `resourceAppId` itself uses — but a *blank* ID isn't treated as a warning,
+ * since that's just an unfinished new row, not a stale/suspicious one. When no options are known at
+ * all for this `resourceAppId` (an unrecognised resource, or a Dependency with nothing exposed),
+ * it's always plain text, warning-free.
+ */
+function permissionIdFieldHtml(
+  resourceAppId: string,
+  permissionId: string,
+  permissionOptionsByResourceAppId: Readonly<Record<string, readonly PermissionOption[]>>
+): string {
+  const options = permissionOptionsByResourceAppId[resourceAppId] ?? [];
+  if (options.length === 0) {
+    return `<input type="text" class="perm-id" placeholder="Permission ID" value="${escapeHtml(permissionId)}" />`;
+  }
+  const matched = options.some((option) => option.id === permissionId);
+  if (permissionId && !matched) {
+    return (
+      `<input type="text" class="perm-id" placeholder="Permission ID" value="${escapeHtml(permissionId)}" />` +
+      `<span class="warning-icon" role="img" aria-label="Warning" title="Not found among the known permissions for this resource — shown as raw text.">⚠</span>`
+    );
+  }
+  const optionsHtml = options
+    .map(
+      (option) =>
+        `<option value="${escapeHtml(option.id)}" data-type="${option.type}" ${selectedAttr(permissionId, option.id)}>${escapeHtml(option.label)} (${option.type})</option>`
+    )
+    .join('');
+  return `<select class="perm-id">${optionsHtml}</select>`;
+}
+
+/**
  * A row's `resourceAppId` renders as the dropdown above when it matches one of the two recognised
  * shapes, or — when it doesn't (a hand-edited file, a reference to a since-renamed/removed
  * dependency, or a raw third-party GUID this form doesn't model) — as plain text with a warning
  * icon instead, so the value is never silently discarded or misrepresented (see UC042).
  */
-function requiredPermissionRowsHtml(rows: readonly RequiredPermission[], dependencyKeys: readonly string[]): string {
+function requiredPermissionRowsHtml(
+  rows: readonly RequiredPermission[],
+  dependencyKeys: readonly string[],
+  permissionOptionsByResourceAppId: Readonly<Record<string, readonly PermissionOption[]>>
+): string {
   return rows
     .map((row) => {
       const choice = parseResourceAppId(row.resourceAppId, dependencyKeys);
@@ -133,7 +173,7 @@ function requiredPermissionRowsHtml(rows: readonly RequiredPermission[], depende
       return `
     <div class="row permission-row">
       ${resourceAppIdField}
-      <input type="text" class="perm-id" placeholder="Permission ID" value="${escapeHtml(row.id)}" />
+      <span class="perm-id-cell">${permissionIdFieldHtml(row.resourceAppId, row.id, permissionOptionsByResourceAppId)}</span>
       <select class="perm-type">
         <option value="Scope" ${selectedAttr(row.type, 'Scope')}>Scope (delegated)</option>
         <option value="Role" ${selectedAttr(row.type, 'Role')}>Role (application)</option>
@@ -204,12 +244,18 @@ function federatedCredentialRowsHtml(entries: readonly FederatedCredentialEntry[
  * `applicationFormLogic.ts` (validation) and `applicationEditorProvider.ts` (document lifecycle),
  * both of which are tested directly.
  */
-export function getHtml(name: string, files: ApplicationFiles, dependencyAppOptions: readonly string[]): string {
+export function getHtml(
+  name: string,
+  files: ApplicationFiles,
+  dependencyAppOptions: readonly string[],
+  permissionOptionsByResourceAppId: Readonly<Record<string, readonly PermissionOption[]>>
+): string {
   const nonce = getNonce();
   const csp = `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';`;
   const { appConfig, application, federatedCredentials, servicePrincipal } = files;
   const dependencyAppOptionsJson = JSON.stringify(dependencyAppOptions).replace(/</g, '\\u003c');
   const microsoftGraphAppIdJson = JSON.stringify(MICROSOFT_GRAPH_APP_ID);
+  const permissionOptionsByResourceAppIdJson = JSON.stringify(permissionOptionsByResourceAppId).replace(/</g, '\\u003c');
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -280,7 +326,7 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
     color: var(--vscode-descriptionForeground);
   }
   .oauth2-scope-enabled-label input { width: auto; }
-  .perm-resourceAppId-wrap { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; }
+  .perm-resourceAppId-wrap, .perm-id-cell { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; }
   .warning-icon {
     flex: 0 0 auto;
     color: var(--vscode-editorWarning-foreground, var(--vscode-problemsWarningIcon-foreground, orange));
@@ -385,7 +431,7 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
 
     <h3>Required permissions</h3>
     <div class="hint">One row per permission — rows sharing a Resource App ID are grouped together when saved. Resource App ID is either Microsoft Graph or one of this application's Dependencies (added above); a value that's neither (e.g. from a hand-edited file, or referencing a dependency since renamed or removed) is shown as plain text with a ⚠ warning instead.</div>
-    <div id="permissionRows">${requiredPermissionRowsHtml(application.requiredPermissions, Object.keys(appConfig.Dependencies))}</div>
+    <div id="permissionRows">${requiredPermissionRowsHtml(application.requiredPermissions, Object.keys(appConfig.Dependencies), permissionOptionsByResourceAppId)}</div>
     <button type="button" class="add-row-btn" id="addPermissionBtn">+ Add permission</button>
 
     <h3>Exposed API scopes (oauth2PermissionScopes)</h3>
@@ -444,6 +490,9 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
     const dependenciesError = document.getElementById('dependenciesError');
     const dependencyAppOptions = ${dependencyAppOptionsJson};
     const MICROSOFT_GRAPH_APP_ID = ${microsoftGraphAppIdJson};
+    // A snapshot as of when this tab was last (re)rendered — see permissionIdOptions.ts for why a
+    // dependency added in this same editing session won't have options here until reopened/reverted.
+    const PERMISSION_OPTIONS_BY_RESOURCE_APP_ID = ${permissionOptionsByResourceAppIdJson};
     const redirectUriRows = document.getElementById('redirectUriRows');
     const permissionRows = document.getElementById('permissionRows');
     const oauth2ScopeRows = document.getElementById('oauth2ScopeRows');
@@ -602,6 +651,58 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
       });
     }
 
+    // Mirrors applicationEditorHtml.ts's permissionIdFieldHtml() — duplicated here for the same
+    // reason as the other server/client pairs in this script: it can't import that TS module.
+    function permissionIdCellHtml(resourceAppId, permissionId) {
+      var options = PERMISSION_OPTIONS_BY_RESOURCE_APP_ID[resourceAppId] || [];
+      if (options.length === 0) {
+        return '<input type="text" class="perm-id" placeholder="Permission ID" value="' + escapeHtml(permissionId) + '" />';
+      }
+      var matched = options.some(function (option) {
+        return option.id === permissionId;
+      });
+      if (permissionId && !matched) {
+        return (
+          '<input type="text" class="perm-id" placeholder="Permission ID" value="' + escapeHtml(permissionId) + '" />' +
+          '<span class="warning-icon" role="img" aria-label="Warning" title="Not found among the known permissions for this resource — shown as raw text.">⚠</span>'
+        );
+      }
+      var optionsHtml = options
+        .map(function (option) {
+          return (
+            '<option value="' +
+            escapeHtml(option.id) +
+            '" data-type="' +
+            option.type +
+            '"' +
+            (permissionId === option.id ? ' selected' : '') +
+            '>' +
+            escapeHtml(option.label) +
+            ' (' +
+            option.type +
+            ')</option>'
+          );
+        })
+        .join('');
+      return '<select class="perm-id">' + optionsHtml + '</select>';
+    }
+
+    // Rebuilds one row's Permission ID cell to match its (possibly just-changed) Resource App ID —
+    // triggered on that field's own 'change' event, not on every edit, since rebuilding on every
+    // keystroke elsewhere in the form would otherwise reset this cell (and any in-progress typing
+    // in its own text-input fallback) for no reason.
+    function refreshPermissionIdCell(row) {
+      var resourceAppId = row.querySelector('.perm-resourceAppId').value;
+      // A permission ID belongs to whichever resource it came from — Microsoft Graph's GUIDs and a
+      // dependency's own scope values are different namespaces entirely, so a value picked/typed
+      // for the *previous* resource is reset rather than carried forward: otherwise it would either
+      // coincidentally (and wrongly) match an unrelated option in the new resource's list, or —
+      // what was actually happening here — show up as an unmatched, warning-flagged raw value for a
+      // resource it was never valid for in the first place (e.g. a Graph GUID left over after
+      // switching to a Dependency).
+      row.querySelector('.perm-id-cell').innerHTML = permissionIdCellHtml(resourceAppId, '');
+    }
+
     function addPermissionRow() {
       appendRow(
         permissionRows,
@@ -609,7 +710,9 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
         '<select class="perm-resourceAppId">' +
           permissionResourceAppIdOptionsHtml('', currentDependencyKeys()) +
           '</select>' +
-          '<input type="text" class="perm-id" placeholder="Permission ID" />' +
+          '<span class="perm-id-cell">' +
+          permissionIdCellHtml(MICROSOFT_GRAPH_APP_ID, '') +
+          '</span>' +
           '<select class="perm-type">' +
           '<option value="Scope">Scope (delegated)</option>' +
           '<option value="Role">Role (application)</option>' +
@@ -782,6 +885,22 @@ export function getHtml(name: string, files: ApplicationFiles, dependencyAppOpti
       refreshPermissionResourceAppIdOptions();
       vscode.postMessage({ type: 'edit', input: buildInputSnapshot() });
     }
+    // A Permission ID's options depend on its row's Resource App ID, and picking a known Permission
+    // ID implies a known Type — both react to their own 'change' event specifically (not every
+    // edit, like refreshPermissionResourceAppIdOptions does) so a rebuild never interrupts typing
+    // elsewhere on the row.
+    form.addEventListener('change', function (e) {
+      if (e.target.classList.contains('perm-resourceAppId')) {
+        refreshPermissionIdCell(e.target.closest('.permission-row'));
+      } else if (e.target.classList.contains('perm-id') && e.target.tagName === 'SELECT') {
+        const selectedOption = e.target.selectedOptions[0];
+        const type = selectedOption && selectedOption.getAttribute('data-type');
+        if (type) {
+          e.target.closest('.permission-row').querySelector('.perm-type').value = type;
+        }
+      }
+    });
+
     form.addEventListener('input', notifyEdit);
     form.addEventListener('change', notifyEdit);
 

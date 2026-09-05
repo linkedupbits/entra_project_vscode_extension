@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { ApplicationEditorProvider } from './applicationEditorProvider';
 import { toApplicationEditorUri } from './applicationEditorUri';
 import { getHtml } from './applicationEditorHtml';
+import { buildPermissionOptionsByResourceAppId } from './permissionIdOptions';
 import { ApplicationStore } from './applicationStore';
 import { ApplicationsBranch } from './applicationsBranch';
 import { ApplicationFormInput } from './applicationFormLogic';
@@ -10,6 +11,10 @@ import { ApplicationFiles, emptyAppConfig, emptyApplicationFields, emptyServiceP
 
 vi.mock('./applicationEditorHtml', () => ({
   getHtml: vi.fn(() => '<html></html>'),
+}));
+
+vi.mock('./permissionIdOptions', () => ({
+  buildPermissionOptionsByResourceAppId: vi.fn(async () => ({})),
 }));
 
 const folderUri = vscode.Uri.parse('file:///repo/entra/applications/sample-web-app') as unknown as vscode.Uri;
@@ -85,6 +90,7 @@ beforeEach(() => {
   vi.mocked(vscode.workspace.fs.writeFile).mockReset();
   vi.mocked(vscode.workspace.fs.delete).mockReset();
   vi.mocked(getHtml).mockClear();
+  vi.mocked(buildPermissionOptionsByResourceAppId).mockClear();
 });
 
 describe('ApplicationEditorProvider', () => {
@@ -115,7 +121,7 @@ describe('ApplicationEditorProvider', () => {
       await provider.resolveCustomEditor(document, panel);
 
       expect(panel.webview.options).toEqual({ enableScripts: true });
-      expect(getHtml).toHaveBeenCalledWith('sample-web-app', sampleFiles, ['other-app']);
+      expect(getHtml).toHaveBeenCalledWith('sample-web-app', sampleFiles, ['other-app'], {});
       expect(panel.webview.html).toBe('<html></html>');
     });
 
@@ -245,7 +251,7 @@ describe('ApplicationEditorProvider', () => {
 
       expect(document.initialFiles).toEqual(reloadedFiles);
       expect(document.pendingInput).toBeUndefined();
-      expect(getHtml).toHaveBeenCalledWith('sample-web-app', reloadedFiles, expect.anything());
+      expect(getHtml).toHaveBeenCalledWith('sample-web-app', reloadedFiles, expect.anything(), expect.anything());
     });
 
     it('does not attempt to re-render when no panel is currently open for the document', async () => {
