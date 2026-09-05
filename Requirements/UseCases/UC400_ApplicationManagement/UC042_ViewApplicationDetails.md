@@ -74,3 +74,4 @@ This is deliberately **not** the shared artifact-viewer webview used elsewhere (
 * [UC040 — Define an Application](UC040_DefineApplication.md) — defines the format this use case reads and writes, and the source of this use case's known comment/anchor/extra-field limitation.
 * [UC041 — Browse Application Definitions](UC041_BrowseApplicationDefinitions.md) — how a user reaches this view; also still the way to open one of the four files directly, unedited by this form.
 * [UC012 — Add Connection](../UC100_Security/UC012_AddConnection.md) — the closest existing precedent for an editable, validating webview form.
+* [UC035 — Download an Application Artifact to the Project](../UC300_ArtifactBrowsing/UC035_DownloadApplicationArtifact.md) — can create or update the very folder this use case edits, from a live tenant capture; this form is the natural next step to open afterward (e.g. to parameterise the captured, concrete values back into Nunjucks placeholders by hand).

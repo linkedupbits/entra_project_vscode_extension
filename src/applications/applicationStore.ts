@@ -94,6 +94,33 @@ export class ApplicationStore {
     return { appConfig, application, federatedCredentials, servicePrincipal };
   }
 
+  /**
+   * Which of the three `.yaml.j2` template files already exist on disk — used by the tenant
+   * application "download" flow (UC035) to decide whether it's safe to write a file (create it
+   * only if missing) versus needing to leave a hand-authored template (with real Nunjucks
+   * placeholders) alone.
+   */
+  async existingTemplateFiles(
+    folderUri: vscode.Uri
+  ): Promise<{ application: boolean; federatedCredentials: boolean; servicePrincipal: boolean }> {
+    let entries: Array<[string, vscode.FileType]>;
+    try {
+      entries = await vscode.workspace.fs.readDirectory(folderUri);
+    } catch (err) {
+      if (err instanceof vscode.FileSystemError && err.code === 'FileNotFound') {
+        entries = [];
+      } else {
+        throw err;
+      }
+    }
+    const names = new Set(entries.map(([name]) => name));
+    return {
+      application: names.has(APPLICATION_TEMPLATE_FILE),
+      federatedCredentials: names.has(FEDERATED_CREDENTIALS_TEMPLATE_FILE),
+      servicePrincipal: names.has(SERVICE_PRINCIPAL_TEMPLATE_FILE),
+    };
+  }
+
   async save(folderUri: vscode.Uri, files: ApplicationFiles): Promise<void> {
     await vscode.workspace.fs.createDirectory(folderUri);
     await Promise.all([

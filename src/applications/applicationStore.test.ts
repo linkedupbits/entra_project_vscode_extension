@@ -212,3 +212,32 @@ describe('ApplicationStore.save', () => {
     expect(parsed).toEqual({ appId: 'x', appRoleAssignmentRequired: false });
   });
 });
+
+describe('ApplicationStore.existingTemplateFiles', () => {
+  it('reports all three as absent when the folder does not exist yet', async () => {
+    vi.mocked(vscode.workspace.fs.readDirectory).mockRejectedValueOnce(FileSystemError.FileNotFound());
+
+    const result = await new ApplicationStore().existingTemplateFiles(folderUri as never);
+
+    expect(result).toEqual({ application: false, federatedCredentials: false, servicePrincipal: false });
+  });
+
+  it('rethrows a non-FileNotFound error', async () => {
+    const boom = new Error('disk on fire');
+    vi.mocked(vscode.workspace.fs.readDirectory).mockRejectedValueOnce(boom);
+
+    await expect(new ApplicationStore().existingTemplateFiles(folderUri as never)).rejects.toBe(boom);
+  });
+
+  it('reports exactly which template files are present, ignoring AppConfig.yaml and other files', async () => {
+    vi.mocked(vscode.workspace.fs.readDirectory).mockResolvedValueOnce([
+      ['AppConfig.yaml', vscode.FileType.File],
+      ['Application.yaml.j2', vscode.FileType.File],
+      ['notes.txt', vscode.FileType.File],
+    ] as never);
+
+    const result = await new ApplicationStore().existingTemplateFiles(folderUri as never);
+
+    expect(result).toEqual({ application: true, federatedCredentials: false, servicePrincipal: false });
+  });
+});

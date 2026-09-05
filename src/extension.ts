@@ -2,8 +2,10 @@ import * as vscode from 'vscode';
 import { ConnectionStore } from './connections/connectionStore';
 import { ConnectionsBranch, ConnectionTreeItem } from './connections/connectionsBranch';
 import { Connection } from './connections/types';
-import { loadApplicationPreview } from './connections/tenantApplicationPreview';
+import { loadApplicationPreview, ApplicationPreviewData } from './connections/tenantApplicationPreview';
 import { buildApplicationPreviewHtml } from './connections/applicationPreviewHtml';
+import { parseTenantApplicationIdentity, TenantApplicationIdentity } from './connections/tenantApplicationIdentity';
+import { downloadApplicationToProject } from './connections/downloadApplicationToProject';
 import { ProjectBranch } from './project/projectBranch';
 import { ApplicationsBranch } from './applications/applicationsBranch';
 import { ApplicationStore } from './applications/applicationStore';
@@ -96,7 +98,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // UC034 — the currently implemented instance of UC032's generic artifact preview, scoped to
     // an Applications-category artifact reached via UC030. Structured, read-only, mirroring
-    // UC042's local editor layout (Application/Federated Credentials/Service Principal).
+    // UC042's local editor layout (Application/Federated Credentials/Service Principal). Offers a
+    // Download button (UC035) when the Service Principal's tags carry a parseable AppName: tag.
     vscode.commands.registerCommand(
       'entra.previewArtifact',
       async (item: { connection: Connection; application: GraphApplication }) => {
@@ -106,11 +109,16 @@ export function activate(context: vscode.ExtensionContext): void {
             { location: vscode.ProgressLocation.Notification, title: `Loading "${label}"…` },
             async () => {
               const data = await loadApplicationPreview(authService, item.connection, item.application);
+              const identity =
+                data.servicePrincipal.kind === 'ok'
+                  ? parseTenantApplicationIdentity(data.servicePrincipal.value.tags)
+                  : undefined;
               ArtifactViewerPanel.show(
                 `${item.connection.name}::${item.application.id}`,
                 label,
                 `Connection: ${item.connection.name}`,
-                buildApplicationPreviewHtml(data)
+                buildApplicationPreviewHtml(data),
+                identity ? () => downloadApplicationPreview(label, identity, data) : undefined
               );
             }
           );
@@ -122,6 +130,39 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     )
   );
+
+  // UC035 — the currently implemented instance of UC031's generic download, scoped to Applications:
+  // captures the previewed application into `<artifactsRoot>/applications/<appName>/`, identified
+  // by the AppName: tag rather than a flat downloaded-artifact snapshot (see UC040's open question
+  // this resolves for Applications specifically).
+  async function downloadApplicationPreview(
+    label: string,
+    identity: TenantApplicationIdentity,
+    data: ApplicationPreviewData
+  ): Promise<void> {
+    try {
+      const result = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: `Downloading "${label}"…` },
+        () => downloadApplicationToProject(applicationStore, identity, data)
+      );
+      if (result.kind === 'ok') {
+        treeProvider.refresh();
+        void vscode.window.showInformationMessage(
+          `Downloaded "${label}" to applications/${identity.appName}.`
+        );
+      } else if (result.kind === 'noWorkspace') {
+        void vscode.window.showErrorMessage('Open a workspace folder before downloading an application.');
+      } else {
+        void vscode.window.showErrorMessage(
+          `Could not download "${label}": part of its preview failed to load. Reopen the preview and try again.`
+        );
+      }
+    } catch (err) {
+      void vscode.window.showErrorMessage(
+        `Could not download "${label}": ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  }
 }
 
 export function deactivate(): void {

@@ -34,11 +34,14 @@ Not all of the above is implemented yet — check before relying on this summary
   full application-definition workflow — browsing, and the structured editor for an existing
   application's four files; and, for a connected connection, an **Applications** folder listing
   its live App Registrations via Graph, each selectable for a read-only, structured preview
-  (Application / Federated Credentials / Service Principal) mirroring the local editor's layout.
+  (Application / Federated Credentials / Service Principal) mirroring the local editor's layout,
+  plus a **Download to project** button when the tenant's Service Principal carries an `AppName:`
+  identifying tag — this seeds or updates the matching local application-definition folder rather
+  than writing a flat downloaded-artifact snapshot.
 - **Not yet implemented**: the other tenant artifact categories (Service Principals, Groups,
-  Directory Roles, External ID user flows/custom auth extensions), downloading a tenant artifact
-  or comparing it with a local file, and actually rendering/deploying an application definition to
-  a tenant.
+  Directory Roles, External ID user flows/custom auth extensions), the flat downloaded-artifact
+  snapshot format for any category, comparing a preview with a local file, and actually
+  rendering/deploying an application definition to a tenant.
 
 [CLAUDE.md](CLAUDE.md) has the full list of architecture decisions and their rationale; the
 [Requirements/](Requirements/) folder is the authoritative source of truth for scope and behavior

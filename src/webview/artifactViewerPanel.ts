@@ -1,34 +1,48 @@
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
+
+interface DownloadMessage {
+  type: 'download';
+}
 
 /**
- * UC032/UC034 — a read-only webview shell showing one live Graph artifact's contents. It is a
- * viewer, not an editor: no scripts, no message-passing, no path back to the tenant or to a local
- * file, per UC032's "read-only by construction" requirement. One panel per `key` (currently
- * `<connection name>::<object id>` — see UC034) — showing an already-open key again reveals and
- * refreshes that panel instead of opening a duplicate, the same pattern ApplicationFormPanel uses
- * for application folders.
+ * UC032/UC034/UC035 — a read-only webview shell showing one live Graph artifact's contents, plus
+ * an optional "Download" action (UC035). It is a viewer, not an editor: the body itself has no
+ * inputs and no way to change what's on the tenant or in a local file — the one interactive
+ * element this shell adds, the Download button, only exists when the caller supplies an
+ * `onDownload` callback, and firing it is the caller's decision entirely (this class just relays
+ * the click). One panel per `key` (currently `<connection name>::<object id>` — see UC034) —
+ * showing an already-open key again reveals and refreshes that panel instead of opening a
+ * duplicate, the same pattern ApplicationFormPanel uses for application folders.
  *
  * `bodyHtml` is caller-supplied content (see UC034's `buildApplicationPreviewHtml`) rendered
- * inside this shell's title/badge/hint chrome — this class owns only the chrome and the shared
- * read-only styling, not any particular artifact type's field layout, so future artifact types
- * can reuse it with their own body content.
+ * inside this shell's title/badge/hint/download chrome — this class owns only the chrome and the
+ * shared read-only styling, not any particular artifact type's field layout, so future artifact
+ * types can reuse it with their own body content.
  *
- * Deliberately scoped for now to what UC034 needs: no "Compare with local file" action (UC032
- * A1), no "Download" action (UC031) — neither exists yet to link to.
+ * Deliberately scoped for now to what UC034/UC035 need: no "Compare with local file" action
+ * (UC032 A1) — that doesn't exist yet to link to.
  */
 export class ArtifactViewerPanel {
   private static readonly openPanels = new Map<string, ArtifactViewerPanel>();
 
   private readonly panel: vscode.WebviewPanel;
+  private onDownload: (() => void | Promise<void>) | undefined;
 
-  static show(key: string, title: string, sourceBadge: string, bodyHtml: string): void {
+  static show(
+    key: string,
+    title: string,
+    sourceBadge: string,
+    bodyHtml: string,
+    onDownload?: () => void | Promise<void>
+  ): void {
     const existing = ArtifactViewerPanel.openPanels.get(key);
     if (existing) {
-      existing.update(title, sourceBadge, bodyHtml);
+      existing.update(title, sourceBadge, bodyHtml, onDownload);
       existing.panel.reveal();
       return;
     }
-    const created = new ArtifactViewerPanel(key, title, sourceBadge, bodyHtml);
+    const created = new ArtifactViewerPanel(key, title, sourceBadge, bodyHtml, onDownload);
     ArtifactViewerPanel.openPanels.set(key, created);
   }
 
@@ -36,16 +50,30 @@ export class ArtifactViewerPanel {
     private readonly key: string,
     title: string,
     sourceBadge: string,
-    bodyHtml: string
+    bodyHtml: string,
+    onDownload: (() => void | Promise<void>) | undefined
   ) {
-    this.panel = vscode.window.createWebviewPanel('entra.artifactViewer', title, vscode.ViewColumn.Active, {});
+    this.panel = vscode.window.createWebviewPanel('entra.artifactViewer', title, vscode.ViewColumn.Active, {
+      enableScripts: true,
+    });
     this.panel.onDidDispose(() => ArtifactViewerPanel.openPanels.delete(this.key));
-    this.update(title, sourceBadge, bodyHtml);
+    this.panel.webview.onDidReceiveMessage((message: DownloadMessage) => {
+      if (message.type === 'download' && this.onDownload) {
+        void this.onDownload();
+      }
+    });
+    this.update(title, sourceBadge, bodyHtml, onDownload);
   }
 
-  private update(title: string, sourceBadge: string, bodyHtml: string): void {
+  private update(
+    title: string,
+    sourceBadge: string,
+    bodyHtml: string,
+    onDownload: (() => void | Promise<void>) | undefined
+  ): void {
+    this.onDownload = onDownload;
     this.panel.title = title;
-    this.panel.webview.html = getHtml(title, sourceBadge, bodyHtml);
+    this.panel.webview.html = getHtml(title, sourceBadge, bodyHtml, onDownload !== undefined);
   }
 }
 
@@ -57,8 +85,13 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function getHtml(title: string, sourceBadge: string, bodyHtml: string): string {
-  const csp = "default-src 'none'; style-src 'unsafe-inline';";
+function getNonce(): string {
+  return crypto.randomBytes(16).toString('base64');
+}
+
+function getHtml(title: string, sourceBadge: string, bodyHtml: string, showDownloadButton: boolean): string {
+  const nonce = getNonce();
+  const csp = `default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -77,6 +110,7 @@ function getHtml(title: string, sourceBadge: string, bodyHtml: string): string {
   h1 { font-size: 1.3em; font-weight: 600; margin: 0 0 8px; }
   h2 { font-size: 1.05em; font-weight: 600; margin: 24px 0 8px; }
   h3 { font-size: 0.95em; font-weight: 600; margin: 16px 0 4px; color: var(--vscode-descriptionForeground); }
+  .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .badge {
     display: inline-block;
     background: var(--vscode-badge-background);
@@ -89,6 +123,10 @@ function getHtml(title: string, sourceBadge: string, bodyHtml: string): string {
   .hint { color: var(--vscode-descriptionForeground); font-size: 0.9em; margin-bottom: 16px; }
   label { display: block; margin-top: 12px; font-weight: 600; }
   .value { margin-top: 2px; }
+  .unique-name {
+    margin-top: 2px;
+    font-family: var(--vscode-editor-font-family, monospace);
+  }
   .empty { color: var(--vscode-descriptionForeground); font-style: italic; }
   ul { margin: 4px 0; padding-left: 20px; }
   code {
@@ -118,13 +156,45 @@ function getHtml(title: string, sourceBadge: string, bodyHtml: string): string {
     white-space: pre-wrap;
     word-break: break-word;
   }
+  button.primary {
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    border: 1px solid var(--vscode-button-border, transparent);
+    border-radius: 2px;
+    padding: 6px 14px;
+    cursor: pointer;
+    font-size: 1em;
+    font-family: inherit;
+    flex: 0 0 auto;
+  }
+  button.primary:hover { background: var(--vscode-button-hoverBackground); }
+  button.primary:disabled { opacity: 0.6; cursor: default; }
 </style>
 </head>
 <body>
-  <h1>${escapeHtml(title)}</h1>
+  <div class="top-row">
+    <h1>${escapeHtml(title)}</h1>
+    ${showDownloadButton ? '<button type="button" class="primary" id="downloadBtn">Download to project</button>' : ''}
+  </div>
   <div class="badge">${escapeHtml(sourceBadge)}</div>
   <div class="hint">Read-only preview of the live Microsoft Graph object — not a local file, and nothing here is saved.</div>
   ${bodyHtml}
+
+${
+  showDownloadButton
+    ? `<script nonce="${nonce}">
+  (function () {
+    const vscode = acquireVsCodeApi();
+    const btn = document.getElementById('downloadBtn');
+    btn.addEventListener('click', function () {
+      btn.disabled = true;
+      btn.textContent = 'Downloading…';
+      vscode.postMessage({ type: 'download' });
+    });
+  })();
+</script>`
+    : ''
+}
 </body>
 </html>`;
 }

@@ -49,13 +49,23 @@ environments, or dependencies to show).
    uses to read `Application.yaml.j2`, `FederatedCredentials.yaml.j2`, and
    `ServicePrincipal.yaml.j2` from disk — so identical field mapping (and the same unmodelled-field
    limitations) applies to both a tenant application and a local one.
-4. The extension shows the three normalized sections — **Application (App Registration)**,
-   **Federated Credentials**, **Service Principal** — in a read-only webview panel
-   (`ArtifactViewerPanel`), titled with the application's display name (or its application ID if
-   display name is blank) and badged "Connection: `<connection name>`". Each section shows its
-   fields as plain read-only text/lists (not inputs), including an explicit "None" for an empty
-   list (no redirect URIs, no required permissions, no federated credentials, no tags) — never a
-   silently blank section indistinguishable from one that failed to load.
+4. The extension shows a **Unique name** line, then the three normalized sections —
+   **Application (App Registration)**, **Federated Credentials**, **Service Principal** — in a
+   read-only webview panel (`ArtifactViewerPanel`), titled with the application's display name (or
+   its application ID if display name is blank) and badged "Connection: `<connection name>`". Each
+   section shows its fields as plain read-only text/lists (not inputs), including an explicit
+   "None" for an empty list (no redirect URIs, no required permissions, no federated credentials,
+   no tags) — never a silently blank section indistinguishable from one that failed to load.
+   * **Unique name** is the `AppName:<Environment>_<BusinessUnit>_<AppName>` tag on the Service
+     Principal (see UC042's Generated tags preview), shown as `<Environment>_<BusinessUnit>_<AppName>`
+     — the one identifier guaranteed unique across applications that happen to share a Graph
+     `displayName`, which Graph itself doesn't enforce as unique. Shown as an explicit "No unique
+     name tag found" state, not omitted, when the Service Principal has no such tag or its section
+     failed to load (see `tenantApplicationIdentity.ts`'s `parseTenantApplicationIdentity()`).
+   * If a unique name was found, the panel also shows a **Download to project** button — see
+     [UC035 — Download an Application Artifact to the Project](UC035_DownloadApplicationArtifact.md).
+     If not, the button is omitted entirely rather than shown disabled, since there would be
+     nothing a disabled state could explain that the "not found" message above it doesn't already.
 5. The user reads the content. The panel has no editable fields, no buttons, and no path back to
    the tenant or to a local file — it is a viewer only.
 6. Selecting the same application again while its panel is still open brings that existing panel
@@ -105,9 +115,13 @@ environments, or dependencies to show).
   here — a deliberate parity choice with UC042 rather than an oversight, not a raw-data fallback.
 * "Compare with local file" (UC032 A1) — there's no downloaded-artifact concept yet to compare
   against.
-* A "Download" action from the panel (UC031) — downloading isn't implemented.
 * Previewing any category other than Applications — the other five UC030 lists remain
   unimplemented, so there's nothing else to preview yet.
+
+A "Download" action from the panel *is* implemented — see
+[UC035](UC035_DownloadApplicationArtifact.md) — but only when a unique-name tag is present; UC031's
+generic (and structurally different) flat-snapshot download remains unimplemented for every
+category, Applications included.
 
 ## Related
 
@@ -116,3 +130,4 @@ environments, or dependencies to show).
 * [UC031 — Download Artifact](UC031_DownloadArtifact.md) — the deferred next step.
 * [UC033 — View Local Project Artifacts](UC033_ViewLocalProjectArtifacts.md) — the deferred local-file side of the shared viewer.
 * [UC042 — View Application Details](../UC400_ApplicationManagement/UC042_ViewApplicationDetails.md) — the local, editable counterpart whose field layout and normalization logic this preview reuses.
+* [UC035 — Download an Application Artifact to the Project](UC035_DownloadApplicationArtifact.md) — the Download button this preview's panel offers when a unique name is found.

@@ -15,6 +15,28 @@ function data(overrides: Partial<ApplicationPreviewData> = {}): ApplicationPrevi
 }
 
 describe('buildApplicationPreviewHtml', () => {
+  it('renders the parsed unique name from an AppName tag on the service principal', () => {
+    const html = buildApplicationPreviewHtml(
+      data({
+        servicePrincipal: {
+          kind: 'ok',
+          value: { appId: 'app-1', appRoleAssignmentRequired: false, tags: ['AppName:dev_Customer Experience_sample-web-app'] },
+        },
+      })
+    );
+    expect(html).toContain('dev_Customer Experience_sample-web-app');
+  });
+
+  it('shows an explicit "not found" state when no AppName tag is present', () => {
+    const html = buildApplicationPreviewHtml(data());
+    expect(html).toContain('No unique name tag found');
+  });
+
+  it('shows the "not found" state when the service principal section itself failed to load', () => {
+    const html = buildApplicationPreviewHtml(data({ servicePrincipal: { kind: 'error', message: 'boom' } }));
+    expect(html).toContain('No unique name tag found');
+  });
+
   it('renders the application display name and sign-in audience', () => {
     const html = buildApplicationPreviewHtml(data());
     expect(html).toContain('My App');

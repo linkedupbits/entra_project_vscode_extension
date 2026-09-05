@@ -4,6 +4,12 @@
 
 This use case details how a user downloads one or more Entra artifacts from a connected tenant into the local project structure.
 
+**Implementation status:** not implemented for any category as the flat-snapshot flow described
+below. Applications have a *different*, implemented download flow —
+[UC035 — Download an Application Artifact to the Project](UC035_DownloadApplicationArtifact.md) —
+that deliberately does not follow this use case's shape, writing into UC040's richer
+application-definition folder instead of a flat snapshot file. See UC035's Overview for why.
+
 ## Actors
 
 * **User**
@@ -49,3 +55,4 @@ This use case details how a user downloads one or more Entra artifacts from a co
 * [UC030 — Browse Tenant Artifacts](UC030_BrowseTenantArtifacts.md) — precondition.
 * [UC020 — Serialize Artifact to Project File](../UC200_ArtifactSerialisation/UC020_SerializeArtifactToProjectFile.md) — performs the actual file write.
 * [UC033 — View Local Project Artifacts](UC033_ViewLocalProjectArtifacts.md) — where the result becomes visible.
+* [UC035 — Download an Application Artifact to the Project](UC035_DownloadApplicationArtifact.md) — the implemented, structurally-different download flow for Applications specifically.

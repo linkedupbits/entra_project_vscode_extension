@@ -68,13 +68,15 @@ code as it's built:
 - `UseCases/UC200_ArtifactSerialisation/` — how a Graph object becomes a local file (UC020).
 - `UseCases/UC300_ArtifactBrowsing/` — the tree control itself (UC029), and
   browsing/downloading/previewing tenant artifacts and viewing the local project structure
-  (UC030–UC034). UC030 is **partially implemented**: a connected connection shows a single
+  (UC030–UC035). UC030 is **partially implemented**: a connected connection shows a single
   Applications (App Registrations) folder listing live Graph data; the other five artifact
   categories, auto-authenticating on expand, manual paging, throttling retry, and per-category
   permission errors are not — see UC030's own "Implementation status" note before assuming any of
   its main-flow steps beyond that one category are built. UC032 (Preview Artifact Before Download)
-  is a generic spec with no code of its own; UC034 is the concrete, implemented instance of it
-  scoped to Applications, and is the one to read for actual behavior.
+  and UC031 (Download Artifact) are both generic specs with no code of their own; UC034 and UC035
+  are the concrete, implemented instances of them scoped to Applications, and are the ones to read
+  for actual behavior — UC035 in particular does **not** follow UC031's flat-snapshot shape, so
+  don't assume it does just because the name suggests it's "the download use case."
 - `UseCases/UC400_ApplicationManagement/` — the on-disk structure for a locally-authored,
   deployable "application definition" (UC040 — **format only, not implemented**: don't assume any
   code creates a *new* application from scratch, renders its Nunjucks templates, or deploys it just
@@ -261,19 +263,44 @@ These came out of an explicit planning pass with the user and should not be sile
   rejected `Promise.allSettled` entry) becomes that section's own `{ kind: 'error', message }`
   rather than failing the other two — only a failure acquiring the access token itself (before any
   of the three calls) aborts the whole preview. `connections/applicationPreviewHtml.ts`'s
-  `buildApplicationPreviewHtml()` (a pure function, genuinely unit-tested — not glue) renders the
-  three sections read-only (labels/lists, no inputs), and `webview/artifactViewerPanel.ts`'s
-  `ArtifactViewerPanel` is now a reusable **shell** (title/badge/hint chrome plus shared CSS) that
-  takes arbitrary caller-built `bodyHtml` — it no longer assumes YAML-in-a-`<pre>`, so a future
-  artifact type can supply its own structured body through the same shell. The panel itself stays
-  intentionally inert (no scripts, no buttons, no message-passing), keyed by
-  `<connection name>::<object id>` so re-selecting the same application reveals/refreshes its
-  existing panel rather than opening a duplicate. `artifactViewerPanel.ts` is excluded from
-  coverage as thin webview glue, same as `connectionFormPanel.ts`/`applicationFormPanel.ts` — but
-  `tenantApplicationPreview.ts` and `applicationPreviewHtml.ts` are not, since they hold real logic
-  (the per-section failure isolation, the field rendering) rather than VS Code wiring. Still not
-  built: the `_meta` block UC020/UC032 describe, "Compare with local file," a "Download" action, or
-  support for any artifact category besides Applications — see UC034 for the full list.
+  `buildApplicationPreviewHtml()` (a pure function, genuinely unit-tested — not glue) renders a
+  **Unique name** line (see below) plus the three sections read-only (labels/lists, no inputs).
+  `webview/artifactViewerPanel.ts`'s `ArtifactViewerPanel` is a reusable **shell**
+  (title/badge/hint/Download-button chrome plus shared CSS) that takes arbitrary caller-built
+  `bodyHtml` — it no longer assumes YAML-in-a-`<pre>`, so a future artifact type can supply its own
+  structured body through the same shell. It's keyed by `<connection name>::<object id>` so
+  re-selecting the same application reveals/refreshes its existing panel rather than opening a
+  duplicate. `artifactViewerPanel.ts` is excluded from coverage as thin webview glue, same as
+  `connectionFormPanel.ts`/`applicationFormPanel.ts` — but `tenantApplicationPreview.ts` and
+  `applicationPreviewHtml.ts` are not, since they hold real logic (the per-section failure
+  isolation, the field rendering) rather than VS Code wiring. Still not built: the `_meta` block
+  UC020/UC032 describe, "Compare with local file," or support for any artifact category besides
+  Applications — see UC034 for the full list.
+- **Unique name + Download (UC035, resolving one of UC040's open questions for Applications)**:
+  `connections/tenantApplicationIdentity.ts`'s `parseTenantApplicationIdentity()` is a small, pure
+  parser for the `AppName:<Environment>_<BusinessUnit>_<AppName>` tag UC042's Generated tags
+  preview already describes — it requires the tag's value to split into exactly three non-blank
+  underscore-separated parts, returning `undefined` rather than guessing on anything else (a
+  malformed match would silently target the wrong folder on download, worse than refusing).
+  `applicationPreviewHtml.ts` calls it to render UC034's **Unique name** line (an explicit
+  "not found" state, never silently omitted). `entra.previewArtifact` in `extension.ts` calls it
+  again on the fetched Service Principal's tags to decide whether to pass an `onDownload` callback
+  into `ArtifactViewerPanel.show()` — the shell only renders its Download button when one is
+  supplied, so "no unique name" means no button, not a disabled one (there's nothing a disabled
+  state would explain that the Unique name line's own message doesn't already). The callback calls
+  `connections/downloadApplicationToProject.ts`'s `downloadApplicationToProject()`, which — this
+  was the one significant design decision in this feature — does **not** write a flat
+  downloaded-artifact snapshot (UC020/UC031's shape). It instead seeds/merges into the *existing*
+  `ApplicationStore`-managed folder for `<AppName>` (UC040), non-destructively:
+  `ApplicationStore.existingTemplateFiles()` (a new method, reading the directory listing rather
+  than adding a new `stat`-based mock surface) tells it which of the three `.yaml.j2` files already
+  exist, and only a missing one is written from the previewed data — an existing one is assumed to
+  be a hand-authored Nunjucks template and is never touched. `AppConfig.yaml`'s `business_unit` is
+  filled in only if blank, and an `Environments` entry for the parsed environment is appended only
+  if no entry already has that `environment_code`. Requires all three of UC034's sections to have
+  loaded successfully (`kind: 'ok'`) — refuses to download, rather than writing a misleadingly
+  empty file, if any one failed. `tenantApplicationIdentity.ts` and `downloadApplicationToProject.ts`
+  are both genuinely unit-tested, not glue.
 - **Extension host**: must run in the Node extension host, not as a web extension — MSAL's loopback
   listener and local filesystem access both require Node APIs.
 - **Shared artifact viewer**: one webview component renders an artifact regardless of whether it

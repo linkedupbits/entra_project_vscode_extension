@@ -69,5 +69,6 @@ This use case details the shape of the single tree control the extension present
 * [UC032 — Preview Artifact Before Download](UC032_PreviewArtifactBeforeDownload.md)
 * [UC033 — View Local Project Artifacts](UC033_ViewLocalProjectArtifacts.md)
 * [UC034 — Preview an Application Artifact](UC034_PreviewApplicationArtifact.md)
+* [UC035 — Download an Application Artifact to the Project](UC035_DownloadApplicationArtifact.md)
 * [UC041 — Browse Application Definitions](../UC400_ApplicationManagement/UC041_BrowseApplicationDefinitions.md)
 * [UC042 — View Application Details](../UC400_ApplicationManagement/UC042_ViewApplicationDetails.md)

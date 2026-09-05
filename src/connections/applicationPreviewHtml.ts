@@ -1,5 +1,6 @@
 import { RequiredPermission, FederatedCredentialEntry } from '../applications/types';
 import { ApplicationPreviewData } from './tenantApplicationPreview';
+import { parseTenantApplicationIdentity } from './tenantApplicationIdentity';
 
 function escapeHtml(value: string): string {
   return value
@@ -54,6 +55,23 @@ function errorBlock(message: string): string {
 }
 
 /**
+ * The `AppName:<Environment>_<BusinessUnit>_<AppName>` tag (see tenantApplicationIdentity.ts),
+ * shown prominently since it's the one identifier guaranteed unique across applications that
+ * happen to share a Graph `displayName` — Graph itself doesn't enforce displayName uniqueness.
+ * Shown as an explicit "not found" state rather than omitted, so its absence (e.g. this
+ * application predates the tagging convention, or was never deployed through it) is visible
+ * rather than looking like the section was simply forgotten.
+ */
+function uniqueNameSection(data: ApplicationPreviewData): string {
+  const tags = data.servicePrincipal.kind === 'ok' ? data.servicePrincipal.value.tags : [];
+  const identity = parseTenantApplicationIdentity(tags);
+  if (!identity) {
+    return '<div class="empty">No unique name tag found on this Service Principal.</div>';
+  }
+  return `<div class="unique-name">${escapeHtml(identity.environment)}_${escapeHtml(identity.businessUnit)}_${escapeHtml(identity.appName)}</div>`;
+}
+
+/**
  * UC034 — the structured, read-only body shown inside ArtifactViewerPanel for an application
  * preview, deliberately mirroring UC042's local structured editor's field layout (Application /
  * Federated Credentials / Service Principal) so a tenant application and a local application
@@ -92,6 +110,9 @@ export function buildApplicationPreviewHtml(data: ApplicationPreviewData): strin
     ${listOrNone(data.servicePrincipal.value.tags)}`;
 
   return `
+    <label>Unique name</label>
+    ${uniqueNameSection(data)}
+
     <h2>Application (App Registration)</h2>
     ${applicationSection}
 
