@@ -2,7 +2,8 @@ import * as vscode from 'vscode';
 import { Connection } from './types';
 import { ConnectionStore } from './connectionStore';
 import { AuthService } from '../auth/authService';
-import { listApplications, GraphApplication } from '../graph/graphClient';
+import { listApplications, listServicePrincipals, GraphApplication } from '../graph/graphClient';
+import { environmentTagValue } from './tenantApplicationIdentity';
 
 export class ConnectionsRootItem extends vscode.TreeItem {
   constructor() {
@@ -91,6 +92,28 @@ export class TenantApplicationItem extends vscode.TreeItem {
   }
 }
 
+/**
+ * UC030 — a grouping node under the Applications folder collecting every tenant application whose
+ * Service Principal carries the same `Environment:<name>` tag (UC042's Generated tags convention).
+ * Applications whose Service Principal has no such tag (or that have no Service Principal at all)
+ * are listed directly under the Applications folder rather than under a group.
+ */
+export class TenantApplicationEnvironmentGroupItem extends vscode.TreeItem {
+  constructor(
+    public readonly connection: Connection,
+    public readonly environment: string,
+    public readonly applications: GraphApplication[]
+  ) {
+    super(`Environment: ${environment}`, vscode.TreeItemCollapsibleState.Collapsed);
+    this.contextValue = 'tenantApplicationEnvironmentGroup';
+    this.iconPath = new vscode.ThemeIcon('symbol-namespace');
+    this.description = `${applications.length} application${applications.length === 1 ? '' : 's'}`;
+    this.tooltip = new vscode.MarkdownString(
+      `Applications tagged **Environment: ${environment}** in ${connection.name}`
+    );
+  }
+}
+
 class TenantApplicationsEmptyPlaceholderItem extends vscode.TreeItem {
   constructor() {
     super('No applications found', vscode.TreeItemCollapsibleState.None);
@@ -118,7 +141,11 @@ export class ConnectionsBranch {
 
   /** Whether `element` is one of this branch's own (non-root) items, for EntraTreeProvider's dispatch. */
   owns(element: vscode.TreeItem): boolean {
-    return element instanceof ConnectionTreeItem || element instanceof TenantApplicationsRootItem;
+    return (
+      element instanceof ConnectionTreeItem ||
+      element instanceof TenantApplicationsRootItem ||
+      element instanceof TenantApplicationEnvironmentGroupItem
+    );
   }
 
   async getChildren(element?: vscode.TreeItem): Promise<vscode.TreeItem[]> {
@@ -132,6 +159,9 @@ export class ConnectionsBranch {
     }
     if (element instanceof TenantApplicationsRootItem) {
       return this.getApplications(element.connection);
+    }
+    if (element instanceof TenantApplicationEnvironmentGroupItem) {
+      return element.applications.map((application) => new TenantApplicationItem(element.connection, application));
     }
     return [];
   }
@@ -148,18 +178,81 @@ export class ConnectionsBranch {
   }
 
   private async getApplications(connection: Connection): Promise<vscode.TreeItem[]> {
+    let accessToken: string;
+    let applications: GraphApplication[];
     try {
-      const accessToken = await this.authService.getGraphAccessToken(connection);
-      const applications = await listApplications(accessToken, connection.cloud);
-      if (applications.length === 0) {
-        return [new TenantApplicationsEmptyPlaceholderItem()];
-      }
-      return applications
-        .slice()
-        .sort((a, b) => (a.displayName || a.appId).localeCompare(b.displayName || b.appId))
-        .map((application) => new TenantApplicationItem(connection, application));
+      accessToken = await this.authService.getGraphAccessToken(connection);
+      applications = await listApplications(accessToken, connection.cloud);
     } catch (err) {
       return [new TenantApplicationsErrorItem(err instanceof Error ? err.message : String(err))];
     }
+    if (applications.length === 0) {
+      return [new TenantApplicationsEmptyPlaceholderItem()];
+    }
+
+    return groupApplicationsByEnvironment(
+      connection,
+      applications,
+      await this.servicePrincipalTagsByAppId(connection, accessToken)
+    );
   }
+
+  /**
+   * Maps each Service Principal's `appId` to its `tags`, for environment grouping. If listing
+   * Service Principals fails (e.g. the connection lacks ServicePrincipal.Read.All), returns an
+   * empty map so the Applications node falls back to a flat, ungrouped list rather than erroring
+   * out entirely — the applications themselves already loaded.
+   */
+  private async servicePrincipalTagsByAppId(
+    connection: Connection,
+    accessToken: string
+  ): Promise<Map<string, string[]>> {
+    try {
+      const servicePrincipals = await listServicePrincipals(accessToken, connection.cloud);
+      return new Map(servicePrincipals.map((sp) => [sp.appId, sp.tags]));
+    } catch {
+      return new Map();
+    }
+  }
+}
+
+const byDisplayName = (a: GraphApplication, b: GraphApplication): number =>
+  (a.displayName || a.appId).localeCompare(b.displayName || b.appId);
+
+/**
+ * UC030 — splits a connection's applications into one `TenantApplicationEnvironmentGroupItem` per
+ * distinct `Environment:<name>` tag found on the matching Service Principal, sorted by environment
+ * name, followed by a flat list of `TenantApplicationItem`s for every application with no such tag.
+ */
+function groupApplicationsByEnvironment(
+  connection: Connection,
+  applications: GraphApplication[],
+  tagsByAppId: Map<string, string[]>
+): vscode.TreeItem[] {
+  const byEnvironment = new Map<string, GraphApplication[]>();
+  const ungrouped: GraphApplication[] = [];
+
+  for (const application of applications) {
+    const environment = environmentTagValue(tagsByAppId.get(application.appId) ?? []);
+    if (environment === undefined) {
+      ungrouped.push(application);
+      continue;
+    }
+    const group = byEnvironment.get(environment) ?? [];
+    group.push(application);
+    byEnvironment.set(environment, group);
+  }
+
+  const groupItems = [...byEnvironment.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(
+      ([environment, apps]) =>
+        new TenantApplicationEnvironmentGroupItem(connection, environment, apps.sort(byDisplayName))
+    );
+
+  const ungroupedItems = ungrouped
+    .sort(byDisplayName)
+    .map((application) => new TenantApplicationItem(connection, application));
+
+  return [...groupItems, ...ungroupedItems];
 }

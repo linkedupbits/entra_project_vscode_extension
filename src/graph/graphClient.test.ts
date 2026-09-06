@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   listApplications,
+  listServicePrincipals,
   getApplication,
   listFederatedIdentityCredentials,
   getServicePrincipalByAppId,
@@ -115,6 +116,88 @@ describe('listApplications', () => {
 
     await expect(listApplications('a-token', 'public')).rejects.toThrow(
       /Microsoft Graph returned 500 Internal Server Error listing applications\.$/
+    );
+  });
+});
+
+describe('listServicePrincipals', () => {
+  const originalFetch = global.fetch;
+
+  beforeEach(() => {
+    global.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it('requests the correct URL for the cloud, selecting id/appId/displayName/tags', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ value: [] }));
+
+    await listServicePrincipals('a-token', 'public');
+
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://graph.microsoft.com/v1.0/servicePrincipals?$select=id,appId,displayName,tags',
+      { headers: { Authorization: 'Bearer a-token' } }
+    );
+  });
+
+  it('uses the usGov cloud host', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ value: [] }));
+
+    await listServicePrincipals('a-token', 'usGov');
+
+    expect(vi.mocked(global.fetch).mock.calls[0][0]).toBe(
+      'https://graph.microsoft.us/v1.0/servicePrincipals?$select=id,appId,displayName,tags'
+    );
+  });
+
+  it('normalizes a well-formed page, defaulting missing fields and filtering non-string tags', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({
+        value: [
+          { id: 'sp-1', appId: 'app-1', displayName: 'SP One', tags: ['Environment:prod', 42, null] },
+          { id: 'sp-2' },
+          'not an object',
+        ],
+      })
+    );
+
+    const result = await listServicePrincipals('a-token', 'public');
+
+    expect(result).toEqual([
+      { id: 'sp-1', appId: 'app-1', displayName: 'SP One', tags: ['Environment:prod'] },
+      { id: 'sp-2', appId: '', displayName: '', tags: [] },
+      { id: '', appId: '', displayName: '', tags: [] },
+    ]);
+  });
+
+  it('follows @odata.nextLink until it is absent, concatenating every page', async () => {
+    vi.mocked(global.fetch)
+      .mockResolvedValueOnce(
+        jsonResponse({
+          value: [{ id: 'sp-1', appId: 'a1', displayName: 'SP One', tags: [] }],
+          '@odata.nextLink': 'https://graph.microsoft.com/v1.0/servicePrincipals?$skiptoken=abc',
+        })
+      )
+      .mockResolvedValueOnce(jsonResponse({ value: [{ id: 'sp-2', appId: 'a2', displayName: 'SP Two', tags: [] }] }));
+
+    const result = await listServicePrincipals('a-token', 'public');
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(global.fetch).mock.calls[1][0]).toBe(
+      'https://graph.microsoft.com/v1.0/servicePrincipals?$skiptoken=abc'
+    );
+    expect(result.map((sp) => sp.id)).toEqual(['sp-1', 'sp-2']);
+  });
+
+  it('throws with the status and body when Graph returns a non-OK response', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(
+      jsonResponse({ error: { message: 'Insufficient privileges' } }, false, 403, 'Forbidden')
+    );
+
+    await expect(listServicePrincipals('a-token', 'public')).rejects.toThrow(
+      /Microsoft Graph returned 403 Forbidden listing service principals/
     );
   });
 });

@@ -13,13 +13,35 @@ interface GraphListResponse<T> {
   '@odata.nextLink'?: string;
 }
 
+/** The subset of Graph's `servicePrincipal` resource UC030's tree uses to group applications by environment. */
+export interface GraphServicePrincipal {
+  id: string;
+  appId: string;
+  displayName: string;
+  tags: string[];
+}
+
 function asString(value: unknown): string {
   return typeof value === 'string' ? value : '';
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
 }
 
 function normalizeApplication(entry: unknown): GraphApplication {
   const obj = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {};
   return { id: asString(obj.id), appId: asString(obj.appId), displayName: asString(obj.displayName) };
+}
+
+function normalizeServicePrincipal(entry: unknown): GraphServicePrincipal {
+  const obj = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {};
+  return {
+    id: asString(obj.id),
+    appId: asString(obj.appId),
+    displayName: asString(obj.displayName),
+    tags: asStringArray(obj.tags),
+  };
 }
 
 /**
@@ -47,6 +69,35 @@ export async function listApplications(accessToken: string, cloud: Cloud): Promi
   }
 
   return applications;
+}
+
+/**
+ * UC030 — lists every service principal (enterprise application) in a tenant, following
+ * `@odata.nextLink` automatically the same way listApplications() does. Only
+ * `id`/`appId`/`displayName`/`tags` are selected: the tree uses these solely to read each
+ * application's deploy-time `Environment:<name>` tag (UC042's Generated tags convention) and
+ * group the connection's applications by logical environment.
+ */
+export async function listServicePrincipals(accessToken: string, cloud: Cloud): Promise<GraphServicePrincipal[]> {
+  const servicePrincipals: GraphServicePrincipal[] = [];
+  let url: string | undefined =
+    `https://${GRAPH_HOST[cloud]}/v1.0/servicePrincipals?$select=id,appId,displayName,tags`;
+
+  while (url) {
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(
+        `Microsoft Graph returned ${response.status} ${response.statusText} listing service principals` +
+          (body ? `: ${body}` : '.')
+      );
+    }
+    const page = (await response.json()) as GraphListResponse<unknown>;
+    servicePrincipals.push(...page.value.map(normalizeServicePrincipal));
+    url = page['@odata.nextLink'];
+  }
+
+  return servicePrincipals;
 }
 
 /**

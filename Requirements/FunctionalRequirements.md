@@ -12,6 +12,8 @@ Initialy it will implement a read-only workflow: authenticating interactively to
 
 Reaching a tenant starts with a **connection**: a saved, named record of how to reach it (tenant ID, cloud, optional client ID), created via an explicit "Add Connection" step and reused every time the user authenticates. Connections are the v1 building block; the multi-environment deployment model above will build on named connections once write-back is in scope.
 
+When browsing a connected tenant's applications, they are grouped in the tree by logical environment — one grouping node per distinct `Environment:<name>` tag found on an application's Service Principal (the same deploy-time tagging convention application definitions use), so applications belonging to the same environment are shown together. See [UC030](UseCases/UC300_ArtifactBrowsing/UC030_BrowseTenantArtifacts.md).
+
 The initial artifact types supported are:
 
 * App registrations and their associated service principals

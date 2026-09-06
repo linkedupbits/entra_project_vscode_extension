@@ -62,3 +62,19 @@ export function parseTenantApplicationIdentity(tags: readonly string[]): TenantA
 export function hasEnvironmentTag(tags: readonly string[]): boolean {
   return tags.some((tag) => tag.startsWith(ENVIRONMENT_TAG_PREFIX));
 }
+
+/**
+ * The value of a Service Principal's `Environment:<name>` tag (UC042's Generated tags preview's
+ * second tag), or undefined if it carries no such tag or the tag has an empty value. UC030's tree
+ * uses this to group a connection's applications by logical environment. A value that's still the
+ * unresolved `{{Environment}}` placeholder (see UC040) is returned unchanged — it's a real, if
+ * pre-deploy, grouping. If several `Environment:` tags are somehow present, the first wins.
+ */
+export function environmentTagValue(tags: readonly string[]): string | undefined {
+  const tag = tags.find((t) => t.startsWith(ENVIRONMENT_TAG_PREFIX));
+  if (!tag) {
+    return undefined;
+  }
+  const value = tag.slice(ENVIRONMENT_TAG_PREFIX.length).trim();
+  return value.length > 0 ? value : undefined;
+}

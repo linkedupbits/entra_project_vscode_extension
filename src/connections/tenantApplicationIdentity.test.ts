@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseTenantApplicationIdentity, hasEnvironmentTag } from './tenantApplicationIdentity';
+import { parseTenantApplicationIdentity, hasEnvironmentTag, environmentTagValue } from './tenantApplicationIdentity';
 
 describe('parseTenantApplicationIdentity', () => {
   it('parses a well-formed AppName tag', () => {
@@ -62,5 +62,33 @@ describe('hasEnvironmentTag', () => {
 
   it('does not match a tag that merely contains "Environment:" without starting with it', () => {
     expect(hasEnvironmentTag(['Prefix:Environment:dev'])).toBe(false);
+  });
+});
+
+describe('environmentTagValue', () => {
+  it('returns the value after "Environment:"', () => {
+    expect(environmentTagValue(['AppName:dev_BU_app', 'Environment:dev'])).toBe('dev');
+  });
+
+  it('trims surrounding whitespace from the value', () => {
+    expect(environmentTagValue(['Environment:  production  '])).toBe('production');
+  });
+
+  it('returns the unresolved literal placeholder as-is', () => {
+    expect(environmentTagValue(['Environment:{{Environment}}'])).toBe('{{Environment}}');
+  });
+
+  it('returns undefined when the value is blank or whitespace only', () => {
+    expect(environmentTagValue(['Environment:'])).toBeUndefined();
+    expect(environmentTagValue(['Environment:   '])).toBeUndefined();
+  });
+
+  it('returns undefined when there is no Environment: tag', () => {
+    expect(environmentTagValue(['AppName:dev_BU_app'])).toBeUndefined();
+    expect(environmentTagValue([])).toBeUndefined();
+  });
+
+  it('uses the first Environment: tag when several are present', () => {
+    expect(environmentTagValue(['Environment:dev', 'Environment:prod'])).toBe('dev');
   });
 });

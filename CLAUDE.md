@@ -420,7 +420,8 @@ These came out of an explicit planning pass with the user and should not be sile
   nodes — **Connections** and **Project** — not two separate views. Both roots are meant to expand
   through the same shape (artifact-category folder → artifact-detail item); today that shape is
   real on both sides but only for one category each — **Applications** under Project (UC041, local
-  files) and **Applications** under a connected connection (UC030, live Graph data). See UC029 for
+  files) and **Applications** under a connected connection (UC030, live Graph data; with an extra
+  **Environment: &lt;name&gt;** grouping level between folder and detail — see UC030 A5). See UC029 for
   the full navigation model, including the already-downloaded indicator that requires
   cross-referencing between the two roots (not yet implemented, since it needs the
   downloaded-artifact side too).
@@ -436,7 +437,25 @@ These came out of an explicit planning pass with the user and should not be sile
   spec (see UC030 for that trade-off's rationale). `ConnectionsBranch` catches anything that fails
   along that path (token acquisition or the Graph call itself) and renders a single
   `tenantApplicationsError` tree item instead of throwing out of `getChildren()`, which would
-  otherwise surface as a silently-empty node. `graphHosts.ts`'s `GRAPH_HOST` map is the one place
+  otherwise surface as a silently-empty node.
+  - **Environment grouping (UC030 A5)**: the Applications list is grouped by logical environment.
+    Alongside `listApplications()`, `getApplications()` also calls `graphClient.ts`'s
+    `listServicePrincipals()` (`$select=id,appId,displayName,tags`, same auto-paging) and builds an
+    `appId → tags` map, then `groupApplicationsByEnvironment()` emits one
+    `TenantApplicationEnvironmentGroupItem` ("Environment: &lt;name&gt;", `Collapsed`, contextValue
+    `tenantApplicationEnvironmentGroup`, carrying its already-sorted `GraphApplication[]`) per
+    distinct value returned by `tenantApplicationIdentity.ts`'s `environmentTagValue()` (first
+    `Environment:` tag on the matching Service Principal; blank/whitespace value → ungrouped;
+    `{{Environment}}` placeholder kept as a real group). Group nodes sort first by env name, then
+    ungrouped `TenantApplicationItem`s (no SP, or SP with no `Environment:` tag), each list by
+    display name. The group node is a third tree level under Applications, so `owns()` recognises it
+    and `getChildren()` maps its stored applications to `TenantApplicationItem`s (no refetch).
+    **Degradation**: a failed `listServicePrincipals()` call (e.g. missing `ServicePrincipal.Read.All`)
+    is swallowed in `servicePrincipalTagsByAppId()` → empty map → flat ungrouped list, rather than
+    an error item; only a failed `listApplications()` (or token acquisition) still yields
+    `tenantApplicationsError`. Reads the tag from the **Service Principal**, not the app
+    registration — matches UC034/UC035's existing tag handling (`hasEnvironmentTag()` etc.).
+  `graphHosts.ts`'s `GRAPH_HOST` map is the one place
   the three sovereign-cloud Graph hostnames are written down — `authService.ts`'s `GRAPH_RESOURCE`
   (token audience) and `graphClient.ts`'s REST base URL both derive from it, so a hostname is never
   duplicated. The other five categories UC030 specifies (Service Principals, Groups, Directory

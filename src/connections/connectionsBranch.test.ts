@@ -1,18 +1,24 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ThemeIcon, ThemeColor, MarkdownString, TreeItemCollapsibleState } from '../test/vscodeMock';
 import {
   ConnectionsRootItem,
   ConnectionTreeItem,
   ConnectionsBranch,
   TenantApplicationsRootItem,
+  TenantApplicationEnvironmentGroupItem,
   TenantApplicationItem,
 } from './connectionsBranch';
 import { ConnectionStore } from './connectionStore';
 import { AuthService } from '../auth/authService';
 import { Connection } from './types';
-import { listApplications } from '../graph/graphClient';
+import { listApplications, listServicePrincipals } from '../graph/graphClient';
 
-vi.mock('../graph/graphClient', () => ({ listApplications: vi.fn() }));
+vi.mock('../graph/graphClient', () => ({ listApplications: vi.fn(), listServicePrincipals: vi.fn() }));
+
+beforeEach(() => {
+  vi.mocked(listApplications).mockResolvedValue([]);
+  vi.mocked(listServicePrincipals).mockResolvedValue([]);
+});
 
 const connA: Connection = { name: 'Bravo', tenantId: 't-bravo', cloud: 'public' };
 const connB: Connection = { name: 'Alpha', tenantId: 't-alpha', cloud: 'usGov' };
@@ -76,6 +82,20 @@ describe('TenantApplicationsRootItem', () => {
   });
 });
 
+describe('TenantApplicationEnvironmentGroupItem', () => {
+  it('is a collapsed group labelled by its environment, carrying its connection and applications', () => {
+    const apps = [{ id: '1', appId: 'a', displayName: 'Alpha App' }];
+    const item = new TenantApplicationEnvironmentGroupItem(connA, 'prod', apps);
+    expect(item.label).toBe('Environment: prod');
+    expect(item.collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
+    expect(item.contextValue).toBe('tenantApplicationEnvironmentGroup');
+    expect(item.connection).toBe(connA);
+    expect(item.applications).toBe(apps);
+    expect(item.description).toBe('1 application');
+    expect(item.iconPath).toBeInstanceOf(ThemeIcon);
+  });
+});
+
 describe('TenantApplicationItem', () => {
   it('labels by display name, describes by appId, and shows both plus the object ID in its tooltip', () => {
     const item = new TenantApplicationItem(connA, { id: 'obj-1', appId: 'app-1', displayName: 'My App' });
@@ -136,10 +156,11 @@ describe('ConnectionsBranch', () => {
   });
 
   describe('owns', () => {
-    it('owns a ConnectionTreeItem and a TenantApplicationsRootItem, but nothing else', () => {
+    it('owns a ConnectionTreeItem, a TenantApplicationsRootItem and an environment group, but not a leaf application', () => {
       const b = branch([]);
       expect(b.owns(new ConnectionTreeItem(connA, true))).toBe(true);
       expect(b.owns(new TenantApplicationsRootItem(connA))).toBe(true);
+      expect(b.owns(new TenantApplicationEnvironmentGroupItem(connA, 'prod', []))).toBe(true);
       expect(b.owns(new TenantApplicationItem(connA, { id: '1', appId: 'a', displayName: 'A' }))).toBe(false);
     });
   });
@@ -201,6 +222,85 @@ describe('ConnectionsBranch', () => {
       expect(children).toHaveLength(1);
       expect(children[0].contextValue).toBe('tenantApplicationsError');
       expect(children[0].description).toContain('Not connected to "Bravo"');
+    });
+
+    it('stringifies a non-Error thrown while loading applications', async () => {
+      const getGraphAccessToken = vi.fn(async () => {
+        throw 'plain string failure';
+      });
+
+      const children = await branch([], [], getGraphAccessToken).getChildren(new TenantApplicationsRootItem(connA));
+
+      expect(children[0].contextValue).toBe('tenantApplicationsError');
+      expect(children[0].description).toBe('plain string failure');
+    });
+
+    it('groups applications by their service principal\'s Environment: tag, groups first then ungrouped', async () => {
+      vi.mocked(listApplications).mockResolvedValueOnce([
+        { id: '1', appId: 'a', displayName: 'Alpha App' },
+        { id: '2', appId: 'b', displayName: 'Bravo App' },
+        { id: '3', appId: 'c', displayName: 'Charlie App' },
+        { id: '4', appId: 'd', displayName: 'Delta App' },
+      ]);
+      vi.mocked(listServicePrincipals).mockResolvedValueOnce([
+        { id: 'sp1', appId: 'a', displayName: 'Alpha App', tags: ['Environment:prod', 'AppName:prod_hr_alpha'] },
+        { id: 'sp2', appId: 'b', displayName: 'Bravo App', tags: ['Environment:dev'] },
+        { id: 'sp3', appId: 'c', displayName: 'Charlie App', tags: ['Environment:prod'] },
+        // Delta App has no service principal at all → ungrouped
+      ]);
+
+      const children = await branch([]).getChildren(new TenantApplicationsRootItem(connA));
+
+      expect(children.map((c) => [c.contextValue, c.label])).toEqual([
+        ['tenantApplicationEnvironmentGroup', 'Environment: dev'],
+        ['tenantApplicationEnvironmentGroup', 'Environment: prod'],
+        ['tenantApplication', 'Delta App'],
+      ]);
+      const prod = children[1] as TenantApplicationEnvironmentGroupItem;
+      expect(prod.applications.map((a) => a.displayName)).toEqual(['Alpha App', 'Charlie App']);
+      expect(prod.description).toBe('2 applications');
+    });
+
+    it('treats a blank or whitespace-only Environment: tag value as ungrouped', async () => {
+      vi.mocked(listApplications).mockResolvedValueOnce([{ id: '1', appId: 'a', displayName: 'Alpha App' }]);
+      vi.mocked(listServicePrincipals).mockResolvedValueOnce([
+        { id: 'sp1', appId: 'a', displayName: 'Alpha App', tags: ['Environment:   '] },
+      ]);
+
+      const children = await branch([]).getChildren(new TenantApplicationsRootItem(connA));
+
+      expect(children.map((c) => c.contextValue)).toEqual(['tenantApplication']);
+    });
+
+    it('falls back to a flat list when listing service principals fails', async () => {
+      vi.mocked(listApplications).mockResolvedValueOnce([
+        { id: '2', appId: 'zeta-app-id', displayName: '' },
+        { id: '1', appId: 'alpha-app-id', displayName: '' },
+      ]);
+      vi.mocked(listServicePrincipals).mockRejectedValueOnce(new Error('Insufficient privileges'));
+
+      const children = await branch([]).getChildren(new TenantApplicationsRootItem(connA));
+
+      // sorted by display name, each falling back to its appId when the display name is blank
+      expect(children.map((c) => [c.contextValue, c.label])).toEqual([
+        ['tenantApplication', 'alpha-app-id'],
+        ['tenantApplication', 'zeta-app-id'],
+      ]);
+    });
+  });
+
+  describe('getChildren(TenantApplicationEnvironmentGroupItem)', () => {
+    it('returns one TenantApplicationItem per application it carries, in the order stored', async () => {
+      const group = new TenantApplicationEnvironmentGroupItem(connA, 'prod', [
+        { id: '1', appId: 'a', displayName: 'Alpha App' },
+        { id: '2', appId: 'b', displayName: 'Bravo App' },
+      ]);
+
+      const children = (await branch([]).getChildren(group)) as TenantApplicationItem[];
+
+      expect(children.every((c) => c instanceof TenantApplicationItem)).toBe(true);
+      expect(children.map((c) => c.label)).toEqual(['Alpha App', 'Bravo App']);
+      expect(children[0].connection).toBe(connA);
     });
   });
 });
