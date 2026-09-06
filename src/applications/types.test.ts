@@ -15,8 +15,10 @@ import {
   buildAppConfigNode,
   SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE,
   SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER,
-  applyServicePrincipalReplyUrls,
-  stripServicePrincipalReplyUrls,
+  APPLICATION_REDIRECT_TEMPLATES,
+  APPLICATION_REDIRECT_PLACEHOLDERS,
+  applyGeneratedRedirectTemplates,
+  stripGeneratedRedirectTemplates,
 } from './types';
 
 describe('emptyAppConfig', () => {
@@ -368,6 +370,57 @@ describe('normalizeApplicationFields > oauth2PermissionScopes', () => {
   });
 });
 
+describe('serializeApplication > redirect blocks', () => {
+  it('always emits web/publicClient/spa with the redirect placeholders (swapped for the loops after stringify)', () => {
+    const result = serializeApplication(emptyApplicationFields());
+    expect(result.web).toEqual({
+      redirectUris: APPLICATION_REDIRECT_PLACEHOLDERS.webRedirectUris,
+      redirectUriSettings: APPLICATION_REDIRECT_PLACEHOLDERS.webRedirectUriSettings,
+    });
+    expect(result.publicClient).toEqual({ redirectUris: APPLICATION_REDIRECT_PLACEHOLDERS.publicClientRedirectUris });
+    expect(result.spa).toEqual({ redirectUris: APPLICATION_REDIRECT_PLACEHOLDERS.spaRedirectUris });
+  });
+
+  it('applyGeneratedRedirectTemplates swaps every placeholder for its loop, indentation preserved', () => {
+    const applied = applyGeneratedRedirectTemplates(YAML.stringify(serializeApplication(emptyApplicationFields())));
+    expect(applied).toContain(`  redirectUris: ${APPLICATION_REDIRECT_TEMPLATES.webRedirectUris}`);
+    expect(applied).toContain(`  redirectUriSettings: ${APPLICATION_REDIRECT_TEMPLATES.webRedirectUriSettings}`);
+    expect(applied).toContain(`  redirectUris: ${APPLICATION_REDIRECT_TEMPLATES.publicClientRedirectUris}`);
+    expect(applied).toContain(`  redirectUris: ${APPLICATION_REDIRECT_TEMPLATES.spaRedirectUris}`);
+    expect(applied).not.toContain('__ENTRA_');
+    // once applied, the file no longer parses as YAML (the loops aren't valid values)
+    expect(() => YAML.parse(applied)).toThrow();
+  });
+
+  it('the two rendered array shapes both parse as YAML (strings, and {uri,index} objects)', () => {
+    expect(YAML.parse('x: ["https://a", "https://b"]').x).toEqual(['https://a', 'https://b']);
+    expect(YAML.parse('x: [{"uri": "https://a", "index": null}, {"uri": "https://b", "index": null}]').x).toEqual([
+      { uri: 'https://a', index: null },
+      { uri: 'https://b', index: null },
+    ]);
+    expect(YAML.parse('x: []').x).toEqual([]);
+  });
+
+  it('the web.redirectUriSettings template emits {"uri": ..., "index": null} objects, always null index', () => {
+    expect(APPLICATION_REDIRECT_TEMPLATES.webRedirectUriSettings).toBe(
+      '[{% for item in (environment.Variables.web_redirectUris | default([])) %}' +
+        '{"uri": "{{ item }}", "index": null}{% if not loop.last %}, {% endif %}{% endfor %}]'
+    );
+  });
+
+  it('each string-array redirect template pulls from its own environment variable list', () => {
+    expect(APPLICATION_REDIRECT_TEMPLATES.webRedirectUris).toContain('environment.Variables.web_redirectUris');
+    expect(APPLICATION_REDIRECT_TEMPLATES.publicClientRedirectUris).toContain('environment.Variables.publicClient_redirectURIs');
+    expect(APPLICATION_REDIRECT_TEMPLATES.spaRedirectUris).toContain('environment.Variables.spa_redirectURIs');
+  });
+
+  it('stripGeneratedRedirectTemplates drops the loop lines, leaving web/publicClient/spa as null keys', () => {
+    const applied = applyGeneratedRedirectTemplates(YAML.stringify(serializeApplication(emptyApplicationFields())));
+    const parsed = YAML.parse(stripGeneratedRedirectTemplates(applied));
+    expect(parsed).toEqual({ displayName: '', signInAudience: 'AzureADMyOrg', web: null, publicClient: null, spa: null });
+  });
+});
+
 describe('serializeApplication > oauth2PermissionScopes', () => {
   it('omits api entirely when there are no scopes', () => {
     const result = serializeApplication(emptyApplicationFields());
@@ -490,21 +543,21 @@ describe('SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE', () => {
   });
 });
 
-describe('applyServicePrincipalReplyUrls / stripServicePrincipalReplyUrls', () => {
+describe('applyGeneratedRedirectTemplates / stripGeneratedRedirectTemplates', () => {
   it('swaps the placeholder line for the raw loop, keeping the line indentation', () => {
     const top = YAML.stringify(serializeServicePrincipal(emptyServicePrincipalFields()));
-    expect(applyServicePrincipalReplyUrls(top)).toContain(`replyUrls: ${SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE}`);
-    expect(applyServicePrincipalReplyUrls(top)).not.toContain(SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER);
+    expect(applyGeneratedRedirectTemplates(top)).toContain(`replyUrls: ${SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE}`);
+    expect(applyGeneratedRedirectTemplates(top)).not.toContain(SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER);
 
     const indented = `ServicePrincipal:\n  appId: ""\n  replyUrls: ${SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER}\n`;
-    expect(applyServicePrincipalReplyUrls(indented)).toContain(`  replyUrls: ${SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE}`);
+    expect(applyGeneratedRedirectTemplates(indented)).toContain(`  replyUrls: ${SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE}`);
   });
 
   it('removes the replyUrls line (raw loop or placeholder) so the rest is valid YAML', () => {
-    const withLoop = applyServicePrincipalReplyUrls(YAML.stringify(serializeServicePrincipal({ appId: 'a', appRoleAssignmentRequired: true, tags: ['t'] })));
+    const withLoop = applyGeneratedRedirectTemplates(YAML.stringify(serializeServicePrincipal({ appId: 'a', appRoleAssignmentRequired: true, tags: ['t'] })));
     expect(() => YAML.parse(withLoop)).toThrow();
 
-    const stripped = stripServicePrincipalReplyUrls(withLoop);
+    const stripped = stripGeneratedRedirectTemplates(withLoop);
     expect(stripped).not.toContain('replyUrls');
     expect(YAML.parse(stripped)).toEqual({ appId: 'a', appRoleAssignmentRequired: true, tags: ['t'] });
   });

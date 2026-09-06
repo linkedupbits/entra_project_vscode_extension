@@ -3,9 +3,24 @@ import * as vscode from 'vscode';
 import * as YAML from 'yaml';
 import { FileSystemError } from '../test/vscodeMock';
 import { ApplicationStore } from './applicationStore';
-import { AppConfig, ApplicationFiles, SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE, stripServicePrincipalReplyUrls } from './types';
+import {
+  AppConfig,
+  ApplicationFiles,
+  APPLICATION_REDIRECT_TEMPLATES,
+  SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE,
+  stripGeneratedRedirectTemplates,
+} from './types';
 
 const folderUri = { fsPath: '/repo/entra/Applications/sample-web-app', toString: () => '/repo/entra/Applications/sample-web-app' };
+
+/** Parses an on-disk `.yaml.j2` after dropping its generated redirect-URI loops (not valid YAML), then removes the now-`null` `web`/`publicClient`/`spa` keys so tests can assert the meaningful shape. */
+function parseTemplate(text: string): Record<string, unknown> {
+  const parsed = YAML.parse(stripGeneratedRedirectTemplates(text)) as Record<string, unknown>;
+  delete parsed.web;
+  delete parsed.publicClient;
+  delete parsed.spa;
+  return parsed;
+}
 
 const sampleAppConfig: AppConfig = {
   application_name: 'sample-web-app',
@@ -137,7 +152,12 @@ describe('ApplicationStore.save', () => {
       YAML.parse(writes.get('/repo/entra/Applications/sample-web-app/AppConfig.yaml')!, { merge: true })
     ).toEqual(sampleAppConfig);
 
-    expect(YAML.parse(writes.get('/repo/entra/Applications/sample-web-app/Application.yaml.j2')!)).toEqual({
+    const applicationText = writes.get('/repo/entra/Applications/sample-web-app/Application.yaml.j2')!;
+    expect(applicationText).toContain(`redirectUris: ${APPLICATION_REDIRECT_TEMPLATES.webRedirectUris}`);
+    expect(applicationText).toContain(`redirectUriSettings: ${APPLICATION_REDIRECT_TEMPLATES.webRedirectUriSettings}`);
+    expect(applicationText).toContain(`redirectUris: ${APPLICATION_REDIRECT_TEMPLATES.publicClientRedirectUris}`);
+    expect(applicationText).toContain(`redirectUris: ${APPLICATION_REDIRECT_TEMPLATES.spaRedirectUris}`);
+    expect(parseTemplate(applicationText)).toEqual({
       displayName: 'Sample Web App (Dev)',
       signInAudience: 'AzureADMyOrg',
       requiredResourceAccess: [
@@ -155,7 +175,7 @@ describe('ApplicationStore.save', () => {
     const servicePrincipalText = writes.get('/repo/entra/Applications/sample-web-app/ServicePrincipal.yaml.j2')!;
     // the generated replyUrls loop is written as raw (non-YAML) text — drop it before parsing
     expect(servicePrincipalText).toContain(`replyUrls: ${SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE}`);
-    expect(YAML.parse(stripServicePrincipalReplyUrls(servicePrincipalText))).toEqual({
+    expect(YAML.parse(stripGeneratedRedirectTemplates(servicePrincipalText))).toEqual({
       appId: '{{ application.appId }}',
       appRoleAssignmentRequired: true,
       tags: ['WindowsAzureActiveDirectoryIntegratedApp'],
@@ -176,7 +196,7 @@ describe('ApplicationStore.save', () => {
     const [, bytes] = vi
       .mocked(vscode.workspace.fs.writeFile)
       .mock.calls.find(([uri]) => (uri as unknown as { fsPath: string }).fsPath.endsWith('Application.yaml.j2'))!;
-    const parsed = YAML.parse(Buffer.from(bytes as Uint8Array).toString('utf8'));
+    const parsed = parseTemplate(Buffer.from(bytes as Uint8Array).toString('utf8'));
 
     expect(parsed).toEqual({ displayName: 'Bare', signInAudience: 'AzureADMyOrg' });
   });
@@ -199,7 +219,7 @@ describe('ApplicationStore.save', () => {
     const [, bytes] = vi
       .mocked(vscode.workspace.fs.writeFile)
       .mock.calls.find(([uri]) => (uri as unknown as { fsPath: string }).fsPath.endsWith('Application.yaml.j2'))!;
-    const parsed = YAML.parse(Buffer.from(bytes as Uint8Array).toString('utf8'));
+    const parsed = parseTemplate(Buffer.from(bytes as Uint8Array).toString('utf8'));
 
     expect(parsed.requiredResourceAccess).toEqual([
       {
@@ -225,7 +245,7 @@ describe('ApplicationStore.save', () => {
     const text = Buffer.from(bytes as Uint8Array).toString('utf8');
 
     expect(text).toContain(`replyUrls: ${SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE}`);
-    expect(YAML.parse(stripServicePrincipalReplyUrls(text))).toEqual({ appId: 'x', appRoleAssignmentRequired: false });
+    expect(YAML.parse(stripGeneratedRedirectTemplates(text))).toEqual({ appId: 'x', appRoleAssignmentRequired: false });
   });
 
   it('load() reads a ServicePrincipal.yaml.j2 that contains the raw replyUrls loop', async () => {

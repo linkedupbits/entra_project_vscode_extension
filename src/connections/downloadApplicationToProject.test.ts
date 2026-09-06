@@ -8,6 +8,7 @@ import {
   emptyAppConfig,
   emptyApplicationFields,
   emptyServicePrincipalFields,
+  APPLICATION_REDIRECT_TEMPLATES,
   SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE,
 } from '../applications/types';
 import { Connection } from './types';
@@ -565,7 +566,7 @@ describe('downloadApplicationToProject', () => {
     ]);
   });
 
-  it('writes the generated replyUrls loop into the downloaded ServicePrincipal.yaml.j2 (via the real ApplicationStore)', async () => {
+  it('writes the generated redirect-URI loops into the downloaded Application.yaml.j2 and ServicePrincipal.yaml.j2 (via the real ApplicationStore)', async () => {
     vi.mocked(getApplicationsRootUri).mockReturnValue(rootUri as never);
     vi.mocked(vscode.workspace.fs.readFile).mockRejectedValue(FileSystemError.FileNotFound());
     vi.mocked(vscode.workspace.fs.readDirectory).mockRejectedValue(FileSystemError.FileNotFound());
@@ -575,12 +576,19 @@ describe('downloadApplicationToProject', () => {
     const result = await downloadApplicationToProject(new ApplicationStore(), identity, okData(), connection);
 
     expect(result.kind).toBe('ok');
-    const spWrite = vi
-      .mocked(vscode.workspace.fs.writeFile)
-      .mock.calls.find(([uri]) => (uri as unknown as { fsPath: string }).fsPath.endsWith('ServicePrincipal.yaml.j2'))!;
-    expect(Buffer.from(spWrite[1] as Uint8Array).toString('utf8')).toContain(
-      `replyUrls: ${SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE}`
-    );
+    const textFor = (name: string) =>
+      Buffer.from(
+        vi
+          .mocked(vscode.workspace.fs.writeFile)
+          .mock.calls.find(([uri]) => (uri as unknown as { fsPath: string }).fsPath.endsWith(name))![1] as Uint8Array
+      ).toString('utf8');
+
+    expect(textFor('ServicePrincipal.yaml.j2')).toContain(`replyUrls: ${SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE}`);
+    const applicationText = textFor('Application.yaml.j2');
+    expect(applicationText).toContain(`redirectUris: ${APPLICATION_REDIRECT_TEMPLATES.webRedirectUris}`);
+    expect(applicationText).toContain(`redirectUriSettings: ${APPLICATION_REDIRECT_TEMPLATES.webRedirectUriSettings}`);
+    expect(applicationText).toContain(`redirectUris: ${APPLICATION_REDIRECT_TEMPLATES.publicClientRedirectUris}`);
+    expect(applicationText).toContain(`redirectUris: ${APPLICATION_REDIRECT_TEMPLATES.spaRedirectUris}`);
   });
 
   it('preserves an existing application_name rather than overwriting it with the identity', async () => {

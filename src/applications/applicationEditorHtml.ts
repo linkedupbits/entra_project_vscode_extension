@@ -676,7 +676,7 @@ export function getHtml(
           <option value="PersonalMicrosoftAccount" ${selectedAttr(application.signInAudience, 'PersonalMicrosoftAccount')}>Personal Microsoft accounts only</option>
         </select>
 
-        <div class="hint">Redirect URIs are defined per environment (in the Environments section above), not here — they can differ per deployment target.</div>
+        <div class="hint">Redirect URIs are defined per environment (in the Environments section above), not here. On save, the App Registration's <code>web</code> / <code>publicClient</code> / <code>spa</code> redirect blocks (and <code>web.redirectUriSettings</code>) are written automatically as Jinja2/Nunjucks loops that pull from those per-environment lists — not editable here.</div>
 
     <details class="section-card" id="permissionsSection">
       <summary class="section-summary"><span>Required permissions</span><span class="section-count" id="permissionCount">(${application.requiredPermissions.length})</span></summary>

@@ -11,8 +11,8 @@ import {
   normalizeServicePrincipalFields,
   serializeApplication,
   serializeServicePrincipal,
-  applyServicePrincipalReplyUrls,
-  stripServicePrincipalReplyUrls,
+  applyGeneratedRedirectTemplates,
+  stripGeneratedRedirectTemplates,
   buildAppConfigNode,
 } from './types';
 
@@ -32,8 +32,8 @@ async function readYamlOrDefault<T>(
     // `merge: true` resolves a `<<: *Anchor` YAML merge key (see AppConfig.yaml's per-environment
     // `Variables`, UC040) into real, flattened entries — without it, `<<` would parse as a literal
     // (and useless) map key. Harmless for the other three files, which never use merge keys.
-    // `preParse` lets ServicePrincipal.yaml.j2 drop its generated `replyUrls` loop, which isn't
-    // valid YAML (see `stripServicePrincipalReplyUrls`).
+    // `preParse` lets Application.yaml.j2 / ServicePrincipal.yaml.j2 drop their generated
+    // redirect-URI loops, which aren't valid YAML (see `stripGeneratedRedirectTemplates`).
     return normalize(YAML.parse(preParse(Buffer.from(bytes).toString('utf8')), { merge: true }));
   } catch (err) {
     if (err instanceof vscode.FileSystemError && err.code === 'FileNotFound') {
@@ -62,7 +62,8 @@ export class ApplicationStore {
       readYamlOrDefault(
         vscode.Uri.joinPath(folderUri, APPLICATION_TEMPLATE_FILE),
         normalizeApplicationFields,
-        emptyApplicationFields
+        emptyApplicationFields,
+        stripGeneratedRedirectTemplates
       ),
       readYamlOrDefault(
         vscode.Uri.joinPath(folderUri, FEDERATED_CREDENTIALS_TEMPLATE_FILE),
@@ -73,7 +74,7 @@ export class ApplicationStore {
         vscode.Uri.joinPath(folderUri, SERVICE_PRINCIPAL_TEMPLATE_FILE),
         normalizeServicePrincipalFields,
         emptyServicePrincipalFields,
-        stripServicePrincipalReplyUrls
+        stripGeneratedRedirectTemplates
       ),
     ]);
 
@@ -118,7 +119,7 @@ export class ApplicationStore {
       ),
       vscode.workspace.fs.writeFile(
         vscode.Uri.joinPath(folderUri, APPLICATION_TEMPLATE_FILE),
-        Buffer.from(YAML.stringify(serializeApplication(files.application)), 'utf8')
+        Buffer.from(applyGeneratedRedirectTemplates(YAML.stringify(serializeApplication(files.application))), 'utf8')
       ),
       vscode.workspace.fs.writeFile(
         vscode.Uri.joinPath(folderUri, FEDERATED_CREDENTIALS_TEMPLATE_FILE),
@@ -126,7 +127,7 @@ export class ApplicationStore {
       ),
       vscode.workspace.fs.writeFile(
         vscode.Uri.joinPath(folderUri, SERVICE_PRINCIPAL_TEMPLATE_FILE),
-        Buffer.from(applyServicePrincipalReplyUrls(YAML.stringify(serializeServicePrincipal(files.servicePrincipal))), 'utf8')
+        Buffer.from(applyGeneratedRedirectTemplates(YAML.stringify(serializeServicePrincipal(files.servicePrincipal))), 'utf8')
       ),
     ]);
   }

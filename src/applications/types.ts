@@ -45,21 +45,40 @@ export const ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS = {
 } as const;
 
 /**
+ * A `{% for %}` loop that renders to a literal array of quoted strings drawn from one
+ * `EnvironmentEntry.Variables` redirect-URI list. A loop rather than a bare `{{ list }}`
+ * interpolation because `{{ list }}` stringifies engine-specifically (`a,b` in Nunjucks,
+ * `['a', 'b']` in Jinja2) and never yields a real YAML array, whereas `for` / `loop.last` / `if` /
+ * `+` / `default` are all common to Jinja2 and Nunjucks — so it renders identically under both.
+ * `| default([])` makes a missing variable contribute an empty array rather than erroring.
+ */
+function redirectUriStringArrayTemplate(variableKey: string): string {
+  return `[{% for item in (environment.Variables.${variableKey} | default([])) %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]`;
+}
+
+/**
+ * Like `redirectUriStringArrayTemplate`, but renders Graph's `web.redirectUriSettings` shape — an
+ * array of `{ "uri": <redirect uri>, "index": null }` objects. `index` is always emitted as `null`
+ * (Graph assigns real indexes itself); the URIs come from the same `web_redirectUris` list that
+ * feeds `web.redirectUris`.
+ */
+function redirectUriSettingsArrayTemplate(variableKey: string): string {
+  return `[{% for item in (environment.Variables.${variableKey} | default([])) %}{"uri": "{{ item }}", "index": null}{% if not loop.last %}, {% endif %}{% endfor %}]`;
+}
+
+/**
  * The templating expression written as `ServicePrincipal.yaml.j2`'s `replyUrls` value on every
- * save (see `serializeServicePrincipal`). A `{% for %}` loop that emits literal YAML array syntax
- * — so the *rendered* file contains a genuine array — over the current environment's three
- * redirect-URI variable lists concatenated with `+`, each `| default([])` so a category the
- * environment doesn't define contributes nothing. Deliberately a loop rather than a bare `{{ list }}`
- * interpolation: `{{ list }}` stringifies engine-specifically (`a,b` in Nunjucks, `['a', 'b']` in
- * Jinja2) and never yields a real YAML array, whereas `for` / `loop.last` / `if` / `+` / `default`
- * are all common to Jinja2 and Nunjucks, so this renders identically under both.
+ * save (see `serializeServicePrincipal`) — the SP-level equivalent of the App Registration's
+ * per-category redirect URIs, so it concatenates the current environment's three redirect-URI
+ * variable lists into one array (via `+`).
  *
  * It is **not valid YAML on its own** (a bare `{%` can't start a YAML value), so it can't pass
- * through `YAML.stringify` as a value: `serializeServicePrincipal` emits
- * `SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER` instead, and `applyServicePrincipalReplyUrls()` swaps
- * in this text afterwards; `stripServicePrincipalReplyUrls()` removes the line again before any
- * `YAML.parse`, since the value is generated and never read back — the same "generated, not
- * round-tripped" treatment as UC042's Generated tags preview.
+ * through `YAML.stringify` as a value: the serializers emit a placeholder instead,
+ * `applyGeneratedRedirectTemplates()` swaps in the real text afterwards, and
+ * `stripGeneratedRedirectTemplates()` removes those lines again before any `YAML.parse`, since
+ * these values are generated and never read back — the same "generated, not round-tripped"
+ * treatment as UC042's Generated tags preview. `Application.yaml.j2`'s `web`/`publicClient`/`spa`
+ * redirect blocks (`APPLICATION_REDIRECT_TEMPLATES`) work the identical way.
  */
 export const SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE = `[{% for item in ${Object.values(
   ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS
@@ -67,32 +86,66 @@ export const SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE = `[{% for item in ${Object.v
   .map((key) => `(environment.Variables.${key} | default([]))`)
   .join(' + ')} %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]`;
 
-/** Stand-in for `replyUrls`'s value while it passes through `YAML.stringify` — see `SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE`. */
-export const SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER = '__ENTRA_REPLY_URLS__';
+/**
+ * The four generated redirect-URI expressions written into `Application.yaml.j2` on every save
+ * (see `serializeApplication`): `web.redirectUris`, `web.redirectUriSettings`,
+ * `publicClient.redirectUris`, `spa.redirectUris`. Each pulls from the matching per-environment
+ * `Variables` list, exactly like `SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE`.
+ */
+export const APPLICATION_REDIRECT_TEMPLATES = {
+  webRedirectUris: redirectUriStringArrayTemplate(ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS.web),
+  webRedirectUriSettings: redirectUriSettingsArrayTemplate(ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS.web),
+  publicClientRedirectUris: redirectUriStringArrayTemplate(ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS.publicClient),
+  spaRedirectUris: redirectUriStringArrayTemplate(ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS.spa),
+} as const;
 
-const REPLY_URLS_PLACEHOLDER_LINE = new RegExp(
-  `^([ \\t]*replyUrls:) ["']?${SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER}["']?$`,
-  'm'
-);
-const REPLY_URLS_LINE = /^[ \t]*replyUrls:.*(\r?\n|$)/m;
+/** Stand-in written in a generated redirect expression's place while it passes through `YAML.stringify` (the loops aren't valid YAML values). */
+export const SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER = '__ENTRA_REPLY_URLS__';
+export const APPLICATION_REDIRECT_PLACEHOLDERS = {
+  webRedirectUris: '__ENTRA_WEB_REDIRECT_URIS__',
+  webRedirectUriSettings: '__ENTRA_WEB_REDIRECT_URI_SETTINGS__',
+  publicClientRedirectUris: '__ENTRA_PUBLIC_CLIENT_REDIRECT_URIS__',
+  spaRedirectUris: '__ENTRA_SPA_REDIRECT_URIS__',
+} as const;
+
+const GENERATED_TEMPLATE_BY_PLACEHOLDER: ReadonlyArray<readonly [string, string]> = [
+  [SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER, SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE],
+  [APPLICATION_REDIRECT_PLACEHOLDERS.webRedirectUris, APPLICATION_REDIRECT_TEMPLATES.webRedirectUris],
+  [APPLICATION_REDIRECT_PLACEHOLDERS.webRedirectUriSettings, APPLICATION_REDIRECT_TEMPLATES.webRedirectUriSettings],
+  [APPLICATION_REDIRECT_PLACEHOLDERS.publicClientRedirectUris, APPLICATION_REDIRECT_TEMPLATES.publicClientRedirectUris],
+  [APPLICATION_REDIRECT_PLACEHOLDERS.spaRedirectUris, APPLICATION_REDIRECT_TEMPLATES.spaRedirectUris],
+];
+
+/** A generated redirect line: one of the known keys, whose value is a `[…]` loop or an `__ENTRA…` placeholder. */
+const GENERATED_REDIRECT_LINE =
+  /^[ \t]*(?:replyUrls|redirectUris|redirectUriSettings):[ \t]*(?:\[|["']?__ENTRA)[^\r\n]*(?:\r?\n|$)/gm;
 
 /**
- * Post-processes `YAML.stringify` / `Document.toString` output for a ServicePrincipal, replacing
- * the placeholder `serializeServicePrincipal` wrote with the real (non-YAML) `replyUrls` loop
- * template. Preserves the line's indentation, so it works both for the standalone
- * `ServicePrincipal.yaml.j2` and for the nested `ServicePrincipal:` key in the combined document.
+ * Post-processes `YAML.stringify` / `Document.toString` output, swapping each generated
+ * redirect-URI placeholder (`serializeApplication` / `serializeServicePrincipal` write these) for
+ * its real, non-YAML `{% for %}` loop. Indentation is preserved, so it works for the standalone
+ * `Application.yaml.j2` / `ServicePrincipal.yaml.j2` and for the nested keys in the combined document.
  */
-export function applyServicePrincipalReplyUrls(yamlText: string): string {
-  return yamlText.replace(REPLY_URLS_PLACEHOLDER_LINE, (_match, prefix: string) => `${prefix} ${SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE}`);
+export function applyGeneratedRedirectTemplates(yamlText: string): string {
+  let result = yamlText;
+  for (const [placeholder, template] of GENERATED_TEMPLATE_BY_PLACEHOLDER) {
+    result = result.replace(
+      new RegExp(`(^[ \\t]*[A-Za-z]+:) ["']?${placeholder}["']?$`, 'm'),
+      (_match, prefix: string) => `${prefix} ${template}`
+    );
+  }
+  return result;
 }
 
 /**
- * Removes the generated `replyUrls:` line before `YAML.parse` — once `applyServicePrincipalReplyUrls`
- * has run, that line holds a `{% for %}` loop that isn't valid YAML. Safe because the value is
- * regenerated on every save and never read back (`normalizeServicePrincipalFields` doesn't model it).
+ * Removes generated redirect-URI lines before `YAML.parse` — once `applyGeneratedRedirectTemplates`
+ * has run, they hold `{% for %}` loops that aren't valid YAML. Safe because these values are
+ * regenerated on every save and never read back (`normalizeApplicationFields` /
+ * `normalizeServicePrincipalFields` don't model `web`/`publicClient`/`spa`/`replyUrls`); a
+ * now-childless `web:`/`publicClient:`/`spa:` key simply parses as `null` and is ignored.
  */
-export function stripServicePrincipalReplyUrls(yamlText: string): string {
-  return yamlText.replace(REPLY_URLS_LINE, '');
+export function stripGeneratedRedirectTemplates(yamlText: string): string {
+  return yamlText.replace(GENERATED_REDIRECT_LINE, '');
 }
 
 /**
@@ -409,15 +462,28 @@ export function groupRequiredPermissions(rows: readonly RequiredPermission[]): A
  * by `ApplicationStore.save()` and `applicationDocumentContent.ts`'s combined virtual document, so
  * both editing surfaces write the identical on-disk shape.
  *
- * Redirect URIs are deliberately *not* written here: they're defined per deployment target and
- * live in each `EnvironmentEntry.Variables` map (see `ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS`), for
- * `Application.yaml.j2` to reference as `{{ environment.Variables.web_redirectUris }}` etc. at
- * deploy time — never as a literal `web`/`spa`/`publicClient` block on the App Registration.
+ * `web`/`publicClient`/`spa` redirect blocks are always written, as generated `{% for %}` loops
+ * (`APPLICATION_REDIRECT_TEMPLATES`) that pull from the per-environment `Variables` redirect-URI
+ * lists (`ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS`) at deploy time — the redirect URIs are still
+ * authored per environment (UC042), this just wires them into the App Registration body. Like
+ * `replyUrls` (see `SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE`), the loops aren't valid YAML values, so
+ * placeholders are emitted here and `applyGeneratedRedirectTemplates` swaps in the real text after
+ * `YAML.stringify`.
  */
 export function serializeApplication(fields: ApplicationFields): Record<string, unknown> {
   const result: Record<string, unknown> = {
     displayName: fields.displayName,
     signInAudience: fields.signInAudience,
+    web: {
+      redirectUris: APPLICATION_REDIRECT_PLACEHOLDERS.webRedirectUris,
+      redirectUriSettings: APPLICATION_REDIRECT_PLACEHOLDERS.webRedirectUriSettings,
+    },
+    publicClient: {
+      redirectUris: APPLICATION_REDIRECT_PLACEHOLDERS.publicClientRedirectUris,
+    },
+    spa: {
+      redirectUris: APPLICATION_REDIRECT_PLACEHOLDERS.spaRedirectUris,
+    },
   };
   const grouped = groupRequiredPermissions(fields.requiredPermissions);
   if (grouped.length > 0) {
@@ -513,7 +579,7 @@ export function overridesOnly(
 /**
  * ServicePrincipal.yaml.j2's Graph JSON shape — see serializeApplication's doc comment for why this
  * is shared/exported. `replyUrls` is emitted as `SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER` here;
- * the caller must run the stringified output through `applyServicePrincipalReplyUrls()` to swap in
+ * the caller must run the stringified output through `applyGeneratedRedirectTemplates()` to swap in
  * the real `replyUrls` loop template (which isn't valid YAML, so can't be a value here). It's a
  * generated value — any `replyUrls` already in the file is replaced on every save.
  */

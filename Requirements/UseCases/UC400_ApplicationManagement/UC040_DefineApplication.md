@@ -78,11 +78,12 @@ Models the Entra App Registration. Structured to mirror the JSON body `POST /app
 displayName: "{{ application_name }} ({{ name }})"
 signInAudience: AzureADMyOrg
 web:
-  redirectUris: "{{ environment.Variables.web_redirectUris }}"
+  redirectUris: [{% for item in (environment.Variables.web_redirectUris | default([])) %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+  redirectUriSettings: [{% for item in (environment.Variables.web_redirectUris | default([])) %}{"uri": "{{ item }}", "index": null}{% if not loop.last %}, {% endif %}{% endfor %}]
 publicClient:
-  redirectUris: "{{ environment.Variables.publicClient_redirectURIs }}"
+  redirectUris: [{% for item in (environment.Variables.publicClient_redirectURIs | default([])) %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]
 spa:
-  redirectUris: "{{ environment.Variables.spa_redirectURIs }}"
+  redirectUris: [{% for item in (environment.Variables.spa_redirectURIs | default([])) %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]
 requiredResourceAccess:
   - resourceAppId: "00000003-0000-0000-c000-000000000000" # Microsoft Graph
     resourceAccess:
@@ -103,6 +104,8 @@ api:
 (`application_name` comes from `AppConfig.yaml`'s application-wide metadata; `name` and `environment_code` from whichever `Environments` entry is being rendered.)
 
 Redirect URIs are defined **per environment**, not once on the App Registration — they can legitimately differ between deployment targets. Each `Environments` entry's own `Variables` map carries three array-valued keys — `web_redirectUris`, `publicClient_redirectURIs`, `spa_redirectURIs` (the mixed `Uris`/`URIs` casing is intentional) — which the template above pulls into the matching Graph `web`/`publicClient`/`spa` blocks. [UC042](UC042_ViewApplicationDetails.md)'s structured editor manages these as three dedicated redirect-URI lists inside each environment card.
+
+Each of those redirect values is written as a `{% for %}` loop that emits literal array syntax (`["a", "b"]`, or `[]` when the environment's list is empty) — the same portable Jinja2/Nunjucks form, and for the same reason, as `ServicePrincipal.yaml.j2`'s `replyUrls` (see below). `web.redirectUriSettings` uses the same `web_redirectUris` list but renders Graph's object shape instead — an array of `{ "uri": <redirect uri>, "index": null }` (the `index` is always `null`; Graph assigns real indexes). Consequently those four lines are **not valid YAML until rendered**; UC042's editor strips them (and re-generates them on save) exactly as it does for `replyUrls`.
 
 `requiredResourceAccess` is what this application *requests* from other resources; `api.oauth2PermissionScopes` is the reverse — delegated permission scopes this application itself *exposes* for other applications to request. Each entry mirrors Graph's `permissionScope` type exactly, one entry per scope. `id` is a GUID Graph uses to match a scope across updates — [UC042](UC042_ViewApplicationDetails.md)'s editor generates one automatically, or (as above) writes it as `{{ environment.Variables.<key> }}` so the real value lives per environment in `AppConfig.yaml` instead of being fixed once at authoring time (see that file's `Environments` bullet above).
 
@@ -131,7 +134,7 @@ tags:
   - "WindowsAzureActiveDirectoryIntegratedApp"
 ```
 
-`replyUrls` is the Service-Principal-level equivalent of the App Registration's per-category redirect URIs: it renders to the concatenation of the current environment's three redirect-URI variable lists (see the Redirect URIs note under `Application.yaml.j2` above), each `| default([])` so a category the environment doesn't define contributes nothing. It's written as a `{% for %}` loop that emits literal array syntax (`["a", "b"]`, or `[]` when all three lists are empty) — deliberately, so the *rendered* file contains a real YAML array rather than an engine-specific stringification of a list; every construct in it (`for` / `loop.last` / `if` / `+` / `default`) is common to Jinja2 and Nunjucks. Consequently **that one line is not valid YAML until rendered** — this is the sole exception to "each of the four files is valid YAML" and is handled by [UC042](UC042_ViewApplicationDetails.md)'s editor stripping the generated line before it parses the file and re-adding it on save (it is generated, not editable).
+`replyUrls` is the Service-Principal-level equivalent of the App Registration's per-category redirect URIs: it renders to the concatenation of the current environment's three redirect-URI variable lists (see the Redirect URIs note under `Application.yaml.j2` above), each `| default([])` so a category the environment doesn't define contributes nothing. It's written as a `{% for %}` loop that emits literal array syntax (`["a", "b"]`, or `[]` when all three lists are empty) — deliberately, so the *rendered* file contains a real YAML array rather than an engine-specific stringification of a list; every construct in it (`for` / `loop.last` / `if` / `+` / `default`) is common to Jinja2 and Nunjucks. Consequently **that line is not valid YAML until rendered** — like `Application.yaml.j2`'s four redirect-block lines above, it's handled by [UC042](UC042_ViewApplicationDetails.md)'s editor stripping the generated line before it parses the file and re-adding it on save (it is generated, not editable). These generated redirect lines are the only parts of the four files that aren't plain valid YAML.
 
 Note the `appId` field's value: a Service Principal is created *from* an Application's `appId` (its client ID), which for a brand-new application does not exist until `Application.yaml.j2` has actually been deployed and Graph has returned one. `ServicePrincipal.yaml.j2` and `FederatedCredentials.yaml.j2` (which similarly needs the Application's object ID as its parent resource) are therefore dependent on `Application.yaml.j2` having been deployed first, *for the same environment* — deploy tooling will need to sequence these three files per environment, not treat them as independent, and resolve a placeholder like `{{ application.appId }}` from that prior deploy step's result rather than from `AppConfig.yaml` like the other placeholders in this use case.
 

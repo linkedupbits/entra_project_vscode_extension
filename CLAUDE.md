@@ -310,10 +310,15 @@ These came out of an explicit planning pass with the user and should not be sile
   dynamic redirect-URI lists (Web / Public client / SPA), stored as *array*-valued entries in that
   environment's own `Variables` under the keys `web_redirectUris` / `publicClient_redirectURIs` /
   `spa_redirectURIs` (the inconsistent `Uris`/`URIs` casing is deliberate — `ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS`
-  in `types.ts` is the single source of truth for them). `Application.yaml.j2` carries **no** redirect
-  URIs of its own now — `ApplicationFields.redirectUris` was removed entirely, along with the
-  App-Registration-section "Redirect URIs" list, `serializeApplication`'s `web` block, and
-  `normalizeApplicationFields`'s read of it. UC034's tenant preview still needs redirect URIs, so it
+  in `types.ts` is the single source of truth for them). Redirect URIs aren't an *editable*
+  `Application.yaml.j2` field — `ApplicationFields.redirectUris` and the App-Registration-section
+  "Redirect URIs" list were removed — but `serializeApplication` **does** always write generated
+  `web`/`publicClient`/`spa` blocks (`APPLICATION_REDIRECT_TEMPLATES`): `{% for %}` loops pulling
+  from those per-environment `Variables` lists, exactly like `replyUrls` (see the ServicePrincipal
+  bullet below and `applyGeneratedRedirectTemplates`/`stripGeneratedRedirectTemplates`).
+  `web.redirectUriSettings` is the object-array variant — `{"uri": …, "index": null}` per item, index
+  always null. `normalizeApplicationFields` still doesn't read web/publicClient/spa (stripped to
+  `null` keys on load). UC034's tenant preview still needs redirect URIs, so it
   reads the raw `web`/`publicClient`/`spa.redirectUris` off the Graph fetch into three side fields on
   `ApplicationPreviewData` (`webRedirectUris` etc. — the same "tenant data that doesn't fit
   `ApplicationFields`" pattern `applicationPublisherDomain` already uses) and shows all three;
@@ -392,15 +397,19 @@ These came out of an explicit planning pass with the user and should not be sile
   — that renders to a real array (`["a","b"]`, or `[]` when empty) of the environment's three
   redirect-URI lists concatenated. A loop, not `{{ list }}`, because bare list interpolation
   stringifies engine-specifically and never yields a YAML array; the loop's constructs are all
-  common to both engines. **That line is not valid YAML** until rendered, so it can't pass through
-  `YAML.stringify`: `serializeServicePrincipal()` emits `SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER`
-  (`__ENTRA_REPLY_URLS__`), and callers post-process the stringified text —
-  `applyServicePrincipalReplyUrls()` swaps the placeholder line for the real loop (keeping indent,
-  so it works for the standalone file and the nested `ServicePrincipal:` key in the combined doc),
-  `stripServicePrincipalReplyUrls()` removes any `replyUrls:` line before `YAML.parse`. `ApplicationStore`
-  (`readYamlOrDefault`'s new `preParse` arg on the SP file + wrapping the SP write) and
-  `applicationDocumentContent.ts` (`buildApplicationDocumentText`/`parseApplicationDocumentText`) both
-  do this. Generated, not modelled on `ServicePrincipalFields`, not round-tripped (same idea as the
+  common to both engines.
+  - **The generated-loop plumbing** (shared by `replyUrls` and `Application.yaml.j2`'s four
+    `web`/`publicClient`/`spa` redirect lines): the loops **aren't valid YAML** so can't pass
+    through `YAML.stringify` as values. The serializers emit placeholders (`__ENTRA_REPLY_URLS__`,
+    `__ENTRA_WEB_REDIRECT_URIS__`, …); `applyGeneratedRedirectTemplates(text)` swaps each placeholder
+    line for its real loop (indent-preserving → works for standalone files and nested keys in the
+    combined doc); `stripGeneratedRedirectTemplates(text)` removes any
+    `replyUrls`/`redirectUris`/`redirectUriSettings` line whose value is a `[…]` loop or `__ENTRA…`
+    placeholder before `YAML.parse` (a now-childless `web:`/`publicClient:`/`spa:` just parses as
+    `null` and is ignored). `ApplicationStore` (`readYamlOrDefault`'s `preParse` arg on the
+    Application + SP files, and wrapping both writes) and `applicationDocumentContent.ts`
+    (`buildApplicationDocumentText`/`parseApplicationDocumentText`) both apply/strip.
+  Generated, not modelled on `ServicePrincipalFields`, not round-tripped (same idea as the
   Generated tags preview); the download path gets it for free via `ApplicationStore.save()`.
   The Tags area also shows a **read-only, display-only** "Generated tags" preview — four tags
   (`AppName:<Environment>_<businessUnit>_<appName>`, `Environment:{{Environment}}`, `<appName>`,

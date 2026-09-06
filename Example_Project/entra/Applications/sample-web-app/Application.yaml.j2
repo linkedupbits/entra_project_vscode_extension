@@ -1,5 +1,12 @@
 displayName: Sample Web App ({{ name }})
 signInAudience: AzureADMyOrg
+web:
+  redirectUris: [{% for item in (environment.Variables.web_redirectUris | default([])) %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+  redirectUriSettings: [{% for item in (environment.Variables.web_redirectUris | default([])) %}{"uri": "{{ item }}", "index": null}{% if not loop.last %}, {% endif %}{% endfor %}]
+publicClient:
+  redirectUris: [{% for item in (environment.Variables.publicClient_redirectURIs | default([])) %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+spa:
+  redirectUris: [{% for item in (environment.Variables.spa_redirectURIs | default([])) %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]
 requiredResourceAccess:
   - resourceAppId: 00000003-0000-0000-c000-000000000000
     resourceAccess:

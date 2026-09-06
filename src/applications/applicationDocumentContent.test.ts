@@ -6,13 +6,28 @@ import {
   emptyAppConfig,
   emptyApplicationFields,
   emptyServicePrincipalFields,
+  APPLICATION_REDIRECT_TEMPLATES,
   SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE,
-  stripServicePrincipalReplyUrls,
+  stripGeneratedRedirectTemplates,
 } from './types';
 
-/** The combined document carries the ServicePrincipal's generated `replyUrls` loop, which isn't valid YAML — drop it before parsing, exactly as `parseApplicationDocumentText` does. */
-function parseDoc(text: string): Record<string, unknown> {
-  return YAML.parse(stripServicePrincipalReplyUrls(text), { merge: true });
+/**
+ * The combined document carries generated redirect-URI loops (`Application`'s web/publicClient/spa,
+ * `ServicePrincipal`'s replyUrls) that aren't valid YAML — drop them before parsing, exactly as
+ * `parseApplicationDocumentText` does, then remove the now-`null` `web`/`publicClient`/`spa` keys so
+ * tests can assert the meaningful shape.
+ */
+function parseDoc(text: string): Record<string, Record<string, unknown>> {
+  const parsed = YAML.parse(stripGeneratedRedirectTemplates(text), { merge: true }) as Record<
+    string,
+    Record<string, unknown>
+  >;
+  if (parsed.Application) {
+    delete parsed.Application.web;
+    delete parsed.Application.publicClient;
+    delete parsed.Application.spa;
+  }
+  return parsed;
 }
 
 const sampleFiles: ApplicationFiles = {
@@ -120,15 +135,19 @@ describe('buildApplicationDocumentText', () => {
     });
   });
 
-  it('writes the ServicePrincipal replyUrls loop as raw (non-YAML) text, indented under its key', () => {
+  it('writes the generated redirect-URI loops (Application web/publicClient/spa, ServicePrincipal replyUrls) as raw non-YAML text', () => {
     const text = buildApplicationDocumentText(sampleFiles);
     expect(text).toContain(`  replyUrls: ${SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE}`);
-    expect(text).not.toContain('__ENTRA_REPLY_URLS__');
-    // the raw loop makes the combined document not directly YAML-parseable
+    expect(text).toContain(`    redirectUris: ${APPLICATION_REDIRECT_TEMPLATES.webRedirectUris}`);
+    expect(text).toContain(`    redirectUriSettings: ${APPLICATION_REDIRECT_TEMPLATES.webRedirectUriSettings}`);
+    expect(text).toContain(`    redirectUris: ${APPLICATION_REDIRECT_TEMPLATES.publicClientRedirectUris}`);
+    expect(text).toContain(`    redirectUris: ${APPLICATION_REDIRECT_TEMPLATES.spaRedirectUris}`);
+    expect(text).not.toContain('__ENTRA_');
+    // the raw loops make the combined document not directly YAML-parseable
     expect(() => YAML.parse(text, { merge: true })).toThrow();
   });
 
-  it('omits web/requiredResourceAccess/tags entirely when empty, matching ApplicationStore.save()', () => {
+  it('omits requiredResourceAccess/api/tags entirely when empty, matching ApplicationStore.save() (redirect blocks are always present)', () => {
     const bareFiles: ApplicationFiles = {
       appConfig: emptyAppConfig(),
       application: emptyApplicationFields(),
