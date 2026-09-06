@@ -19,7 +19,6 @@ The following is a manifest that provides highly-priviedged readonly access for 
 	"isFallbackPublicClient": true,
 	"nativeAuthenticationApisEnabled": null,
 	"notes": null,
-	"publisherDomain": "nzxsmartnonprod.onmicrosoft.com",
 	"serviceManagementReference": null,
 	"signInAudience": "AzureADMyOrg",
 	"tags": [],
