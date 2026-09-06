@@ -15,9 +15,14 @@ This use case details the shape of the single tree control the extension present
 
 ## Main Flow
 
-1. User opens the Entra view. The tree shows exactly two top-level nodes:
+1. User opens the Entra view. The tree shows exactly two top-level nodes, both **expanded by
+   default** (as is **Project**'s own **Applications** node) so the saved connections and the local
+   application definitions are visible immediately, without expanding anything:
    * **Connections**
    * **Project**
+
+   (After the first session this is subject to A4's persisted expand/collapse state — the default
+   only applies until the user changes it.)
 2. Expanding **Connections** lists every saved connection (see [UC012 — Add Connection](../UC100_Security/UC012_AddConnection.md)) as a child node, labelled with its friendly name (e.g. "Tenancy 1") and an icon indicating whether it is currently connected or not.
 3. Expanding a connection node shows the fixed set of artifact-category folder nodes for that tenant: App Registrations, Service Principals, Groups, Directory Roles, External ID User Flows, External ID Custom Authentication Extensions (see [UC030](UC030_BrowseTenantArtifacts.md)). **Implemented so far**: only a *connected* connection is expandable at all, and only shows a single **Applications** folder (App Registrations); the other five categories, and auto-authenticating a disconnected connection on expand (A1 below), remain unimplemented.
 4. Expanding a category folder shows one artifact-detail item per object in that category. **Implemented differently for Applications**: the **Applications** folder groups its contents by logical environment — one **Environment: &lt;name&gt;** grouping node per distinct `Environment:<name>` tag found on an application's Service Principal (see [UC030](UC030_BrowseTenantArtifacts.md) A5 and [UC042](../UC400_ApplicationManagement/UC042_ViewApplicationDetails.md)'s Generated tags convention), each expanding to the applications in that environment; applications whose Service Principal carries no such tag (or that have no Service Principal) are listed directly under the folder, after the groups.

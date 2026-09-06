@@ -3,7 +3,9 @@ import { getApplicationsRootUri } from '../workspacePaths';
 
 export class ApplicationsRootItem extends vscode.TreeItem {
   constructor() {
-    super('Applications', vscode.TreeItemCollapsibleState.Collapsed);
+    // Expanded by default — the local application definitions are the main thing in the Project
+    // subtree today, so the user shouldn't have to expand two levels to see them on every open.
+    super('Applications', vscode.TreeItemCollapsibleState.Expanded);
     this.contextValue = 'applicationsRoot';
     this.iconPath = new vscode.ThemeIcon('package');
   }

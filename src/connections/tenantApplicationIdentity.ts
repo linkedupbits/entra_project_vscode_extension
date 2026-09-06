@@ -39,10 +39,18 @@ export interface ApplicationDownloadTarget {
  */
 export function parseTenantApplicationIdentity(tags: readonly string[]): TenantApplicationIdentity | undefined {
   const tag = tags.find((t) => t.startsWith(APP_NAME_TAG_PREFIX));
-  if (!tag) {
-    return undefined;
-  }
-  const parts = tag.slice(APP_NAME_TAG_PREFIX.length).split('_');
+  return tag ? parseUniqueName(tag.slice(APP_NAME_TAG_PREFIX.length)) : undefined;
+}
+
+/**
+ * Parses a bare `<Environment>_<BusinessUnit>_<AppName>` unique-name string (the *value* of an
+ * `AppName:` tag, or any other place that string appears — e.g. a resource application's display
+ * name that follows the same convention) into its three parts. Returns undefined unless it splits
+ * into exactly three non-blank underscore-separated parts — same strictness, and same reasoning, as
+ * `parseTenantApplicationIdentity()` above: these parts feed a filesystem path.
+ */
+export function parseUniqueName(value: string): TenantApplicationIdentity | undefined {
+  const parts = value.split('_');
   if (parts.length !== 3 || parts.some((part) => part.trim().length === 0)) {
     return undefined;
   }

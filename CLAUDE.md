@@ -417,8 +417,11 @@ These came out of an explicit planning pass with the user and should not be sile
   `applicationDocumentContent.ts`) — without it, `<<` parses as a literal, useless map key instead
   of resolving.
 - **One tree, two roots**: the extension exposes a single tree control with exactly two top-level
-  nodes — **Connections** and **Project** — not two separate views. Both roots are meant to expand
-  through the same shape (artifact-category folder → artifact-detail item); today that shape is
+  nodes — **Connections** and **Project** — not two separate views. Both roots (and Project's
+  `ApplicationsRootItem`) are created `Expanded`, so the view is useful on first open without any
+  clicking; VS Code's own persisted tree state takes over after that (UC029 A4). Both roots are
+  meant to expand through the same shape (artifact-category folder → artifact-detail item); today
+  that shape is
   real on both sides but only for one category each — **Applications** under Project (UC041, local
   files) and **Applications** under a connected connection (UC030, live Graph data; with an extra
   **Environment: &lt;name&gt;** grouping level between folder and detail — see UC030 A5). See UC029 for
@@ -555,11 +558,17 @@ These came out of an explicit planning pass with the user and should not be sile
     instead of the tenant GUID — UC042's Permission Editor keys a dependency scope by value, not
     GUID (`permissionIdOptions.ts`), so a GUID would render as a ⚠ unrecognised value. A row whose
     permission the live lookup didn't expose keeps its original `id`; Graph rows are returned
-    unchanged (Graph GUIDs are fixed). Key = the resource's resolved `displayName` squashed to
-    `[A-Za-z0-9]` (matching UC040's own `SampleAPIApp` example), or the raw `appId` when unresolved
-    (no SP in tenant — user's explicit choice) or when that key already belongs to a different
-    `AppName`. Existing `Dependencies` are merged, never overwritten; an entry already pointing at
-    the same `AppName` is reused for the rewrite. `downloadApplicationToProject()` runs this **only
+    unchanged (Graph GUIDs are fixed). Each entry's `AppName` is that resource's *folder name*, via
+    `dependencyFolderName()`: the `<AppName>` part of the resource SP's own
+    `AppName:<Env>_<BU>_<AppName>` tag (`GraphResourceApplication.tags`, now selected by
+    `getResourceApplicationPermissions()` — `parseTenantApplicationIdentity`), else its display name
+    if that itself parses as the 3-part form (`parseUniqueName`), else the plain display name, else
+    the `appId` when unresolved — so a dependency and a direct download (UC035) of the same resource
+    land in the *same* `Applications/<name>/` folder. Key = that `AppName` squashed to `[A-Za-z0-9]`
+    (matching UC040's own `SampleAPIApp` example; `sample-api` → `sampleapi`), or the raw `appId`
+    when unresolved (no SP in tenant — user's explicit choice) or when that key already belongs to a
+    different `AppName`. Existing `Dependencies` are merged, never overwritten; an entry already
+    pointing at the same `AppName` is reused for the rewrite. `downloadApplicationToProject()` runs this **only
     when writing a fresh `Application.yaml.j2`** (`!existingTemplates.application`) — it then sets
     `appConfig.Dependencies` to the merged map and writes `derivation.requiredPermissions`; an
     existing hand-authored template and its `Dependencies` map are both left untouched.
@@ -572,7 +581,8 @@ These came out of an explicit planning pass with the user and should not be sile
   never replaced, so a name that can't be resolved just falls back to its own raw ID in place,
   never blocking the row. Two resolution paths feed `applicationPreviewHtml.ts`'s
   `permissionsListOrNone()`, unified through one shared shape, `graphClient.ts`'s
-  `GraphResourceApplication` (`{ displayName, permissions: Record<id, {name, type}> }`):
+  `GraphResourceApplication` (`{ displayName, tags: string[], permissions: Record<id, {name, type}> }`
+  — `tags` is the resource SP's own tags, `[]` for the Graph catalogue, used by UC035 A6):
   - **Microsoft Graph** (`resourceAppId === '00000003-…'`) resolves from
     `graph/wellKnownPermissions.ts`'s `getWellKnownResourceApplication()` — no network call at
     preview time. Backed by a checked-in JSON catalogue
@@ -597,7 +607,7 @@ These came out of an explicit planning pass with the user and should not be sile
     narrower `'Role' | 'Scope'` union once, at the import site).
   - **Any other `resourceAppId`** resolves at runtime via `graphClient.ts`'s
     `getResourceApplicationPermissions()` — the exact same kind of
-    `GET /v1.0/servicePrincipals?$filter=appId eq '{resourceAppId}'&$select=displayName,appRoles,oauth2PermissionScopes`
+    `GET /v1.0/servicePrincipals?$filter=appId eq '{resourceAppId}'&$select=displayName,tags,appRoles,oauth2PermissionScopes`
     call as the Microsoft-Graph-specific one above, just aimed at whatever resource a permission
     row references, since there is no static catalogue for anything but Microsoft Graph.
     `tenantApplicationPreview.ts`'s `resolveResourceApplications()` collects every *distinct*

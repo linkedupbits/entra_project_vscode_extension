@@ -104,6 +104,7 @@ describe('buildApplicationPreviewHtml', () => {
         resourceApplications: {
           '00000003-0000-0000-c000-000000000000': {
             displayName: 'Microsoft Graph',
+            tags: [],
             permissions: { '7ab1d382-f21e-4acd-a863-ba3e13f7da61': { name: 'Directory.Read.All', type: 'Role' } },
           },
         },
@@ -144,7 +145,7 @@ describe('buildApplicationPreviewHtml', () => {
           },
         },
         resourceApplications: {
-          'some-other-api': { displayName: 'Some Other API', permissions: {} },
+          'some-other-api': { displayName: 'Some Other API', tags: [], permissions: {} },
         },
       })
     );
@@ -167,7 +168,7 @@ describe('buildApplicationPreviewHtml', () => {
           },
         },
         resourceApplications: {
-          'api-app-id': { displayName: 'Sample API App', permissions: {} },
+          'api-app-id': { displayName: 'Sample API App', tags: [], permissions: {} },
         },
       })
     );

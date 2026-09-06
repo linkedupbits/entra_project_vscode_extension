@@ -157,6 +157,7 @@ describe('downloadApplicationToProject', () => {
       resourceApplications: {
         'api-app-id': {
           displayName: 'Sample API App',
+          tags: [],
           permissions: { 'a1b2c3-scope-guid': { name: 'access_as_user', type: 'Scope' } },
         },
       },
@@ -199,7 +200,7 @@ describe('downloadApplicationToProject', () => {
           oauth2PermissionScopes: [],
         },
       },
-      resourceApplications: { 'api-app-id': { displayName: 'Sample API App', permissions: {} } },
+      resourceApplications: { 'api-app-id': { displayName: 'Sample API App', tags: [], permissions: {} } },
     });
 
     await downloadApplicationToProject(store, identity, data, connection);

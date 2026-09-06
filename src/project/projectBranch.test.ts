@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { TreeItemCollapsibleState } from '../test/vscodeMock';
 import { ProjectRootItem, ProjectBranch } from './projectBranch';
 import { ApplicationsBranch, ApplicationItem } from '../applications/applicationsBranch';
 
@@ -9,10 +10,11 @@ function fakeApplicationsBranch(): ApplicationsBranch {
 }
 
 describe('ProjectRootItem', () => {
-  it('is a collapsed root labelled Project', () => {
+  it('is an expanded root labelled Project', () => {
     const item = new ProjectRootItem();
     expect(item.label).toBe('Project');
     expect(item.contextValue).toBe('projectRoot');
+    expect(item.collapsibleState).toBe(TreeItemCollapsibleState.Expanded);
   });
 });
 

@@ -45,10 +45,11 @@ environments, or dependencies to show).
    * `GET /v1.0/servicePrincipals?$filter=appId eq '{appId}'` — the Enterprise Application
      (Service Principal) for this application's `appId`, if one exists.
    * Once the application's `requiredResourceAccess` is known, one further
-     `GET /v1.0/servicePrincipals?$filter=appId eq '{resourceAppId}'&$select=displayName,appRoles,oauth2PermissionScopes`
+     `GET /v1.0/servicePrincipals?$filter=appId eq '{resourceAppId}'&$select=displayName,tags,appRoles,oauth2PermissionScopes`
      call per *distinct* resource application it references (not per permission row, and not for
      Microsoft Graph — see step 4's Required Permissions bullet below) — resolving each referenced
-     resource's display name and its own permission catalogue.
+     resource's display name, its Service Principal's `tags` (used by UC035 A6 to name the
+     dependency's project folder), and its own permission catalogue.
 3. Each of the three application/credentials/service-principal responses is normalized through the same functions
    [UC042](../UC400_ApplicationManagement/UC042_ViewApplicationDetails.md)'s structured editor
    uses to read `Application.yaml.j2`, `FederatedCredentials.yaml.j2`, and

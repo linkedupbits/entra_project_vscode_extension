@@ -9,8 +9,12 @@ function perm(resourceAppId: string, id = 'p', type: RequiredPermission['type'] 
   return { resourceAppId, id, type };
 }
 
-function resource(displayName: string, permissions: GraphResourceApplication['permissions'] = {}): GraphResourceApplication {
-  return { displayName, permissions };
+function resource(
+  displayName: string,
+  permissions: GraphResourceApplication['permissions'] = {},
+  tags: string[] = []
+): GraphResourceApplication {
+  return { displayName, tags, permissions };
 }
 
 describe('deriveApplicationDependencies', () => {
@@ -96,5 +100,29 @@ describe('deriveApplicationDependencies', () => {
 
     expect(result.dependencies['api-1']).toEqual({ AppName: 'Sample API App' });
     expect(result.requiredPermissions[0].resourceAppId).toBe('{{ dependency_refs.api-1.applicationId }}');
+  });
+
+  it('stores just the <AppName> part when the resource carries an AppName:<Env>_<BU>_<AppName> tag', () => {
+    const resources = {
+      'api-1': resource('Sample API App', {}, ['AppName:prod_Platform_sample-api', 'Environment:prod']),
+    };
+    const result = deriveApplicationDependencies([perm('api-1')], resources, {});
+
+    expect(result.dependencies).toEqual({ sampleapi: { AppName: 'sample-api' } });
+    expect(result.requiredPermissions[0].resourceAppId).toBe('{{ dependency_refs.sampleapi.applicationId }}');
+  });
+
+  it('parses a 3-part display name when there is no AppName: tag', () => {
+    const resources = { 'api-1': resource('prod_Platform_sample-api') };
+    const result = deriveApplicationDependencies([perm('api-1')], resources, {});
+
+    expect(result.dependencies).toEqual({ sampleapi: { AppName: 'sample-api' } });
+  });
+
+  it('keeps the full display name when it is not in 3-part form and there is no tag', () => {
+    const resources = { 'api-1': resource('Sample API App') };
+    const result = deriveApplicationDependencies([perm('api-1')], resources, {});
+
+    expect(result.dependencies).toEqual({ SampleAPIApp: { AppName: 'Sample API App' } });
   });
 });

@@ -174,6 +174,7 @@ describe('loadApplicationPreview', () => {
 
       expect(result.resourceApplications[MICROSOFT_GRAPH_APP_ID]).toEqual({
         displayName: 'Microsoft Graph',
+        tags: [],
         permissions: expect.objectContaining({
           '7ab1d382-f21e-4acd-a863-ba3e13f7da61': { name: 'Directory.Read.All', type: 'Role' },
         }),
@@ -189,6 +190,7 @@ describe('loadApplicationPreview', () => {
       vi.mocked(getServicePrincipalByAppId).mockResolvedValueOnce(undefined);
       vi.mocked(getResourceApplicationPermissions).mockResolvedValueOnce({
         displayName: 'Other API',
+        tags: [],
         permissions: { 'perm-1': { name: 'Data.Read', type: 'Scope' } },
       });
 
@@ -197,6 +199,7 @@ describe('loadApplicationPreview', () => {
       expect(getResourceApplicationPermissions).toHaveBeenCalledWith('a-token', 'public', 'other-api');
       expect(result.resourceApplications['other-api']).toEqual({
         displayName: 'Other API',
+        tags: [],
         permissions: { 'perm-1': { name: 'Data.Read', type: 'Scope' } },
       });
     });
@@ -215,7 +218,7 @@ describe('loadApplicationPreview', () => {
       });
       vi.mocked(listFederatedIdentityCredentials).mockResolvedValueOnce([]);
       vi.mocked(getServicePrincipalByAppId).mockResolvedValueOnce(undefined);
-      vi.mocked(getResourceApplicationPermissions).mockResolvedValueOnce({ displayName: 'Other API', permissions: {} });
+      vi.mocked(getResourceApplicationPermissions).mockResolvedValueOnce({ displayName: 'Other API', tags: [], permissions: {} });
 
       await loadApplicationPreview(fakeAuth(), connection, application);
 

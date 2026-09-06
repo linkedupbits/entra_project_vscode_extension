@@ -182,9 +182,11 @@ export interface GraphResourcePermission {
   type: 'Role' | 'Scope';
 }
 
-/** A resource application's display name plus its exposed permissions, keyed by permission ID. */
+/** A resource application's display name, its Service Principal's tags, plus its exposed permissions keyed by permission ID. */
 export interface GraphResourceApplication {
   displayName: string;
+  /** The resource Service Principal's `tags` — carries the `AppName:<Env>_<BU>_<AppName>` generated tag when the resource was deployed through UC042's tagging convention; `[]` for the static Microsoft Graph catalogue. */
+  tags: string[];
   permissions: Record<string, GraphResourcePermission>;
 }
 
@@ -203,7 +205,7 @@ export async function getResourceApplicationPermissions(
   resourceAppId: string
 ): Promise<GraphResourceApplication | undefined> {
   const filter = encodeURIComponent(`appId eq '${resourceAppId}'`);
-  const url = `https://${GRAPH_HOST[cloud]}/v1.0/servicePrincipals?$filter=${filter}&$select=displayName,appRoles,oauth2PermissionScopes`;
+  const url = `https://${GRAPH_HOST[cloud]}/v1.0/servicePrincipals?$filter=${filter}&$select=displayName,tags,appRoles,oauth2PermissionScopes`;
   const response = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
   if (!response.ok) {
     const body = await response.text().catch(() => '');
@@ -230,5 +232,9 @@ export async function getResourceApplicationPermissions(
     permissions[asString(scope.id)] = { name: asString(scope.value), type: 'Scope' };
   }
 
-  return { displayName: asString(servicePrincipal.displayName) || resourceAppId, permissions };
+  return {
+    displayName: asString(servicePrincipal.displayName) || resourceAppId,
+    tags: asStringArray(servicePrincipal.tags),
+    permissions,
+  };
 }

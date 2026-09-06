@@ -46,6 +46,7 @@ describe('download preserves the scope value for a recognised dependency (previe
     });
     vi.mocked(getResourceApplicationPermissions).mockResolvedValueOnce({
       displayName: 'Sample API App',
+      tags: ['AppName:dev_Platform_sample-api', 'Environment:dev'],
       permissions: { 'scope-guid-x': { name: 'access_as_user', type: 'Scope' } },
     });
 
@@ -77,10 +78,12 @@ describe('download preserves the scope value for a recognised dependency (previe
 
     expect(result.kind).toBe('ok');
     const files = saved[0] as { appConfig: { Dependencies: unknown }; application: { requiredPermissions: unknown[] } };
-    expect(files.appConfig.Dependencies).toEqual({ SampleAPIApp: { AppName: 'Sample API App' } });
+    // AppName is the dependency's own AppName: tag's <AppName> part, not its full display name —
+    // the same folder a direct download of "sample-api" would create.
+    expect(files.appConfig.Dependencies).toEqual({ sampleapi: { AppName: 'sample-api' } });
     expect(files.application.requiredPermissions).toEqual([
       { resourceAppId: '00000003-0000-0000-c000-000000000000', id: 'graph-guid', type: 'Role' },
-      { resourceAppId: '{{ dependency_refs.SampleAPIApp.applicationId }}', id: 'access_as_user', type: 'Scope' },
+      { resourceAppId: '{{ dependency_refs.sampleapi.applicationId }}', id: 'access_as_user', type: 'Scope' },
     ]);
   });
 });

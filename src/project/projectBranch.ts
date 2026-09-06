@@ -3,7 +3,9 @@ import { ApplicationsBranch, ApplicationsRootItem } from '../applications/applic
 
 export class ProjectRootItem extends vscode.TreeItem {
   constructor() {
-    super('Project', vscode.TreeItemCollapsibleState.Collapsed);
+    // Expanded by default, like the Connections root — the local project structure should be
+    // visible the moment the view opens, not one click away.
+    super('Project', vscode.TreeItemCollapsibleState.Expanded);
     this.contextValue = 'projectRoot';
     this.iconPath = new vscode.ThemeIcon('folder');
   }

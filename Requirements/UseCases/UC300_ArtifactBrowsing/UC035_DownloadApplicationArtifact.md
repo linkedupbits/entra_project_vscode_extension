@@ -139,12 +139,16 @@ preconditions above are met.
    **isn't** Microsoft Graph's well-known ID (`00000003-0000-0000-c000-000000000000`), the
    extension adds an entry to `AppConfig.yaml`'s `Dependencies` map — recording that this
    application depends, at deploy time, on another application:
-   * The entry's `AppName` (the depended-on application definition's folder name) is the resource's
-     resolved display name (from UC034's live resource lookup), or the bare `resourceAppId` when
-     that lookup found no Service Principal for it in the tenant.
-   * The map key is that display name squashed to alphanumerics (e.g. `Sample API App` →
-     `SampleAPIApp`), or the `resourceAppId` when unresolved or when that key is already taken by a
-     different application.
+   * The entry's `AppName` is the depended-on application definition's **folder name** — i.e. the
+     same value a direct download (this use case, step 2) of that resource would name its folder.
+     Resolution, in order: the `<AppName>` part of the resource Service Principal's own
+     `AppName:<Environment>_<BusinessUnit>_<AppName>` tag if it carries one (fetched by UC034's live
+     resource lookup, which now also selects the SP's `tags`); else the resource's display name if
+     that itself splits into that same three-part form; else the resource's plain display name; else
+     the bare `resourceAppId` when UC034's lookup found no Service Principal for it in the tenant.
+   * The map key is that resolved name squashed to alphanumerics (e.g. `Sample API App` →
+     `SampleAPIApp`, `sample-api` → `sampleapi`), or the `resourceAppId` when unresolved or when
+     that key is already taken by a different application.
    * An existing `Dependencies` entry that already points at the same application (by `AppName`) is
      reused rather than duplicated.
 3. Each Required Permission row for such a resource is rewritten in the `Application.yaml.j2` being

@@ -1,16 +1,21 @@
 import { DependencyEntry, RequiredPermission } from '../applications/types';
 import { GraphResourceApplication } from '../graph/graphClient';
 import { MICROSOFT_GRAPH_APP_ID, buildDependencyReference } from '../applications/resourceAppIdReference';
+import { parseTenantApplicationIdentity, parseUniqueName } from './tenantApplicationIdentity';
 
 /** One dependency worked out from a non-Graph `resourceAppId` in an application's required permissions. */
 export interface DerivedDependency {
   /** The `AppConfig.yaml` `Dependencies` map key — the name templates reference it by (`{{ dependency_refs.<key>.applicationId }}`). */
   key: string;
-  /** The referenced application definition's folder name — the resource's display name, or its `appId` when the resource couldn't be resolved. */
+  /**
+   * The referenced application definition's folder name — its own `AppName:` tag's `<AppName>` part
+   * (or a 3-part display name) when the resource follows UC042's convention, else the resource's
+   * plain display name, else its `appId` when the resource couldn't be resolved at all.
+   */
   appName: string;
   /** The tenant `resourceAppId` this was derived from. */
   resourceAppId: string;
-  /** Whether the resource resolved to a real display name (`false` = keyed by `appId` as a fallback). */
+  /** Whether the resource resolved to a Service Principal (`false` = keyed by `appId` as a fallback). */
   resolved: boolean;
 }
 
@@ -37,11 +42,26 @@ function referenceKeyFromName(name: string): string {
 }
 
 /**
+ * The application-definition folder name to record for a resolved resource: its own
+ * `AppName:<Env>_<BU>_<AppName>` generated tag's `<AppName>` part if it carries one (the same value
+ * a direct download of that resource — UC035 — would name its folder, so a dependency and a direct
+ * download land in the *same* folder), else its display name parsed as that 3-part form if it
+ * happens to follow the convention, else the raw display name.
+ */
+function dependencyFolderName(resource: GraphResourceApplication): string {
+  const displayName = resource.displayName.trim();
+  const identity = parseTenantApplicationIdentity(resource.tags) ?? parseUniqueName(displayName);
+  return identity ? identity.appName : displayName;
+}
+
+/**
  * UC034/UC035 — reads an application's Required Permissions and, for every distinct `resourceAppId`
  * that isn't Microsoft Graph's well-known ID, works out a dependency on another application: its
- * `AppConfig.yaml` `Dependencies` entry (keyed by the resource's display name squashed to
- * alphanumerics, or by its `appId` when the resource has no Service Principal in the tenant and so
- * couldn't be resolved), plus the `{{ dependency_refs.<key>.applicationId }}` reference the
+ * `AppConfig.yaml` `Dependencies` entry (`AppName` = that resource's application-definition folder
+ * name per `dependencyFolderName()` — its `AppName:` tag's `<AppName>` part where it has one, so a
+ * dependency and a direct download of the same resource share a folder; keyed by that name squashed
+ * to alphanumerics, or by the `appId` when the resource has no Service Principal in the tenant and
+ * so couldn't be resolved), plus the `{{ dependency_refs.<key>.applicationId }}` reference the
  * matching permission rows' `resourceAppId` should be rewritten to so UC042's editor recognises
  * them.
  *
@@ -68,9 +88,10 @@ export function deriveApplicationDependencies(
   ];
 
   for (const resourceAppId of distinctResourceAppIds) {
-    const displayName = resourceApplications[resourceAppId]?.displayName.trim() ?? '';
-    const resolved = displayName.length > 0;
-    const appName = resolved ? displayName : resourceAppId;
+    const resource = resourceApplications[resourceAppId];
+    const folderName = resource ? dependencyFolderName(resource) : '';
+    const resolved = folderName.length > 0;
+    const appName = resolved ? folderName : resourceAppId;
 
     const existingKey = Object.keys(dependencies).find((k) => dependencies[k].AppName === appName);
     if (existingKey) {
@@ -78,7 +99,7 @@ export function deriveApplicationDependencies(
       continue;
     }
 
-    const preferred = (resolved && referenceKeyFromName(displayName)) || resourceAppId;
+    const preferred = (resolved && referenceKeyFromName(appName)) || resourceAppId;
     const key = preferred in dependencies ? resourceAppId : preferred;
     dependencies[key] = { AppName: appName };
     derived.push({ key, appName, resourceAppId, resolved });

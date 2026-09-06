@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { parseTenantApplicationIdentity, hasEnvironmentTag, environmentTagValue } from './tenantApplicationIdentity';
+import {
+  parseTenantApplicationIdentity,
+  parseUniqueName,
+  hasEnvironmentTag,
+  environmentTagValue,
+} from './tenantApplicationIdentity';
 
 describe('parseTenantApplicationIdentity', () => {
   it('parses a well-formed AppName tag', () => {
@@ -40,6 +45,27 @@ describe('parseTenantApplicationIdentity', () => {
 
   it('does not match a tag that merely contains "AppName:" without starting with it', () => {
     expect(parseTenantApplicationIdentity(['Prefix:AppName:dev_BU_app'])).toBeUndefined();
+  });
+});
+
+describe('parseUniqueName', () => {
+  it('splits a well-formed 3-part unique name', () => {
+    expect(parseUniqueName('dev_Customer Experience_sample-web-app')).toEqual({
+      environment: 'dev',
+      businessUnit: 'Customer Experience',
+      appName: 'sample-web-app',
+    });
+  });
+
+  it('returns undefined when there are not exactly three parts', () => {
+    expect(parseUniqueName('Sample API App')).toBeUndefined();
+    expect(parseUniqueName('dev_BU')).toBeUndefined();
+    expect(parseUniqueName('dev_BU_app_extra')).toBeUndefined();
+  });
+
+  it('returns undefined when any part is blank', () => {
+    expect(parseUniqueName('dev__app')).toBeUndefined();
+    expect(parseUniqueName('_BU_app')).toBeUndefined();
   });
 });
 

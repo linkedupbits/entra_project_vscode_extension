@@ -32,5 +32,5 @@ const catalogues: readonly WellKnownPermissionsFile[] = [wellKnownMicrosoftGraph
  */
 export function getWellKnownResourceApplication(resourceAppId: string): GraphResourceApplication | undefined {
   const catalogue = catalogues.find((c) => c.resourceAppId === resourceAppId);
-  return catalogue ? { displayName: catalogue.displayName, permissions: catalogue.permissions } : undefined;
+  return catalogue ? { displayName: catalogue.displayName, tags: [], permissions: catalogue.permissions } : undefined;
 }

@@ -423,23 +423,24 @@ describe('getResourceApplicationPermissions', () => {
     global.fetch = originalFetch;
   });
 
-  it('requests the resource by appId, selecting displayName/appRoles/oauth2PermissionScopes', async () => {
+  it('requests the resource by appId, selecting displayName/tags/appRoles/oauth2PermissionScopes', async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(jsonResponse({ value: [] }));
 
     await getResourceApplicationPermissions('a-token', 'public', 'resource-app-1');
 
     expect(global.fetch).toHaveBeenCalledWith(
-      "https://graph.microsoft.com/v1.0/servicePrincipals?$filter=appId%20eq%20'resource-app-1'&$select=displayName,appRoles,oauth2PermissionScopes",
+      "https://graph.microsoft.com/v1.0/servicePrincipals?$filter=appId%20eq%20'resource-app-1'&$select=displayName,tags,appRoles,oauth2PermissionScopes",
       { headers: { Authorization: 'Bearer a-token' } }
     );
   });
 
-  it('builds a permissions map from appRoles (Role) and oauth2PermissionScopes (Scope)', async () => {
+  it('builds a permissions map from appRoles (Role) and oauth2PermissionScopes (Scope), and carries the SP tags', async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(
       jsonResponse({
         value: [
           {
             displayName: 'Some Other API',
+            tags: ['AppName:prod_Platform_some-other-api', 42],
             appRoles: [{ id: 'role-1', value: 'Data.ReadWrite.All' }],
             oauth2PermissionScopes: [{ id: 'scope-1', value: 'Data.Read' }],
           },
@@ -451,6 +452,7 @@ describe('getResourceApplicationPermissions', () => {
 
     expect(result).toEqual({
       displayName: 'Some Other API',
+      tags: ['AppName:prod_Platform_some-other-api'],
       permissions: {
         'role-1': { name: 'Data.ReadWrite.All', type: 'Role' },
         'scope-1': { name: 'Data.Read', type: 'Scope' },
@@ -471,7 +473,7 @@ describe('getResourceApplicationPermissions', () => {
 
     const result = await getResourceApplicationPermissions('a-token', 'public', 'resource-app-1');
 
-    expect(result).toEqual({ displayName: 'Some Other API', permissions: {} });
+    expect(result).toEqual({ displayName: 'Some Other API', tags: [], permissions: {} });
   });
 
   it('falls back to the resourceAppId as displayName when the field is blank', async () => {

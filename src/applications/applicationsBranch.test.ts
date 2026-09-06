@@ -20,10 +20,11 @@ function givenApplicationsRoot(): void {
 }
 
 describe('ApplicationsRootItem', () => {
-  it('is a collapsed root labelled Applications', () => {
+  it('is an expanded root labelled Applications', () => {
     const item = new ApplicationsRootItem();
     expect(item.label).toBe('Applications');
     expect(item.contextValue).toBe('applicationsRoot');
+    expect(item.collapsibleState).toBe(TreeItemCollapsibleState.Expanded);
   });
 });
 
