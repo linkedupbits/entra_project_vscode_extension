@@ -481,7 +481,8 @@ These came out of an explicit planning pass with the user and should not be sile
   rather than failing the other two — only a failure acquiring the access token itself (before any
   of the three calls) aborts the whole preview. `connections/applicationPreviewHtml.ts`'s
   `buildApplicationPreviewHtml()` (a pure function, genuinely unit-tested — not glue) renders a
-  **Unique name** line (see below) plus the three sections read-only (labels/lists, no inputs).
+  **Unique name** line (see below) plus the three sections read-only (labels/lists, no inputs),
+  including a **Dependencies** list under the Application section (UC035 A6 — see below).
   `webview/artifactViewerPanel.ts`'s `ArtifactViewerPanel` is a reusable **shell**
   (title/badge/hint/Download-button chrome plus shared CSS) that takes arbitrary caller-built
   `bodyHtml` — it no longer assumes YAML-in-a-`<pre>`, so a future artifact type can supply its own
@@ -541,6 +542,22 @@ These came out of an explicit planning pass with the user and should not be sile
   to download, rather than writing a misleadingly empty file, if any one failed.
   `tenantApplicationIdentity.ts`, `promptForApplicationName.ts`, and
   `downloadApplicationToProject.ts` are all genuinely unit-tested, not glue.
+  - **Dependencies derived from Required Permissions (UC035 A6)**: `applicationDependencies.ts`'s
+    `deriveApplicationDependencies(requiredPermissions, resourceApplications, existingDependencies)`
+    (pure, unit-tested) walks every distinct non-Microsoft-Graph `resourceAppId`
+    (`resourceAppId !== MICROSOFT_GRAPH_APP_ID`, from `resourceAppIdReference.ts`) and produces an
+    `AppConfig.yaml` `Dependencies` entry for it plus a `resourceAppId → {{ dependency_refs.<key>.applicationId }}`
+    rewrite. Key = the resource's resolved `displayName` squashed to `[A-Za-z0-9]` (matching UC040's
+    own `SampleAPIApp` example), or the raw `appId` when unresolved (no SP in tenant — user's
+    explicit choice) or when that key already belongs to a different `AppName`. Existing
+    `Dependencies` are merged, never overwritten; an entry already pointing at the same `AppName` is
+    reused for the rewrite. `downloadApplicationToProject()` runs this **only when writing a fresh
+    `Application.yaml.j2`** (`!existingTemplates.application`) — it then sets `appConfig.Dependencies`
+    to the merged map and rewrites the written file's `requiredPermissions[].resourceAppId`; an
+    existing hand-authored template and its `Dependencies` map are both left untouched.
+    `applicationPreviewHtml.ts` calls the same function (with `{}` for existing deps) to render
+    UC034's read-only **Dependencies** list under the Application section — resolved as `name
+    (appId)`, unresolved flagged; Microsoft Graph never listed.
 - **Required Permissions name resolution (UC034 preview only), static for Microsoft Graph + live
   for everything else**: UC034's Required Permissions rows render as
   `<Application name> : <Scope name> (<Application ID> : <Scope ID>)` — the IDs are always shown,

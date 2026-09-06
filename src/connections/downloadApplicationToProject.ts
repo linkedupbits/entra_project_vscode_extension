@@ -1,11 +1,13 @@
 import * as vscode from 'vscode';
 import { ApplicationStore } from '../applications/applicationStore';
 import {
+  ApplicationFields,
   ApplicationFiles,
   ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS,
   ServicePrincipalFields,
 } from '../applications/types';
 import { reservedTagPrefixFor } from '../applications/applicationFormLogic';
+import { deriveApplicationDependencies } from './applicationDependencies';
 import { getApplicationsRootUri } from '../workspacePaths';
 import { Connection } from './types';
 import { ApplicationDownloadTarget, hasEnvironmentTag } from './tenantApplicationIdentity';
@@ -58,6 +60,12 @@ function stripGeneratedTags(tags: readonly string[], appName: string): string[] 
  *   (`ApplicationStore.existingTemplateFiles()`); one already present is never touched. The
  *   Service Principal's tags are filtered (`stripGeneratedTags()`) before being written, so the
  *   four tags UC042 generates automatically are never captured as if they were custom ones.
+ * - When a fresh `Application.yaml.j2` is written, every non-Graph `resourceAppId` in its Required
+ *   Permissions is turned into an `AppConfig.yaml` `Dependencies` entry (merged into any already
+ *   there) and the permission row is rewritten to reference it as
+ *   `{{ dependency_refs.<key>.applicationId }}` — see `deriveApplicationDependencies()`. Microsoft
+ *   Graph permissions are left alone. If `Application.yaml.j2` already exists, its permissions and
+ *   the existing `Dependencies` map are both left untouched.
  *
  * Requires every section of `data` to have loaded successfully — if any of the three Graph calls
  * UC034 makes failed, there is nothing trustworthy to write for that section, so this refuses to
@@ -117,14 +125,37 @@ export async function downloadApplicationToProject(
     tags: stripGeneratedTags(data.servicePrincipal.value.tags, identity.appName),
   };
 
+  // Dependencies on other applications are worked out from the tenant application's Required
+  // Permissions — but only when writing a fresh Application.yaml.j2, since rewriting a permission
+  // row's resourceAppId to a dependency_refs reference is meaningless without also owning that file.
+  const derivedDependencies = existingTemplates.application
+    ? undefined
+    : deriveApplicationDependencies(
+        data.application.value.requiredPermissions,
+        data.resourceApplications,
+        existing.appConfig.Dependencies
+      );
+
+  const applicationFile: ApplicationFields = derivedDependencies
+    ? {
+        ...data.application.value,
+        requiredPermissions: data.application.value.requiredPermissions.map((permission) =>
+          derivedDependencies.resourceAppIdRewrites[permission.resourceAppId]
+            ? { ...permission, resourceAppId: derivedDependencies.resourceAppIdRewrites[permission.resourceAppId] }
+            : permission
+        ),
+      }
+    : data.application.value;
+
   const files: ApplicationFiles = {
     appConfig: {
       ...existing.appConfig,
       application_name: existing.appConfig.application_name || identity.appName,
       business_unit: existing.appConfig.business_unit || identity.businessUnit || '',
       Environments: environments,
+      Dependencies: derivedDependencies ? derivedDependencies.dependencies : existing.appConfig.Dependencies,
     },
-    application: existingTemplates.application ? existing.application : data.application.value,
+    application: existingTemplates.application ? existing.application : applicationFile,
     federatedCredentials: existingTemplates.federatedCredentials
       ? existing.federatedCredentials
       : data.federatedCredentials.value,

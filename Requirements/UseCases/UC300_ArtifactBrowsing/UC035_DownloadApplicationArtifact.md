@@ -61,6 +61,9 @@ preconditions above are met.
      file — which may be a hand-authored Nunjucks template with real `{{ }}` placeholders — is
      never overwritten with the concrete, resolved values a live tenant capture produces; doing so
      would silently destroy the templating UC040 depends on.
+   * When a fresh `Application.yaml.j2` is written (only then — see above), its Required Permissions
+     are used to populate `AppConfig.yaml`'s `Dependencies` map (see A6). Microsoft Graph
+     permissions are excluded.
    * The Service Principal's `tags` are filtered before being written into
      `ServicePrincipal.yaml.j2` (only when that file doesn't already exist — see above): any tag
      starting with `AppName:`, `Environment:`, or `BusinessUnit:`, and any tag exactly equal to
@@ -125,6 +128,29 @@ preconditions above are met.
    `tenancy_type` are left blank instead — the original behavior, unchanged when this additional
    signal isn't present.
 
+### A6 — Deriving dependencies from Required Permissions
+
+1. A fresh `Application.yaml.j2` is being written (step 4 — an existing one is left alone, and so
+   is the existing `Dependencies` map).
+2. For every distinct `resourceAppId` in the previewed Application's Required Permissions that
+   **isn't** Microsoft Graph's well-known ID (`00000003-0000-0000-c000-000000000000`), the
+   extension adds an entry to `AppConfig.yaml`'s `Dependencies` map — recording that this
+   application depends, at deploy time, on another application:
+   * The entry's `AppName` (the depended-on application definition's folder name) is the resource's
+     resolved display name (from UC034's live resource lookup), or the bare `resourceAppId` when
+     that lookup found no Service Principal for it in the tenant.
+   * The map key is that display name squashed to alphanumerics (e.g. `Sample API App` →
+     `SampleAPIApp`), or the `resourceAppId` when unresolved or when that key is already taken by a
+     different application.
+   * An existing `Dependencies` entry that already points at the same application (by `AppName`) is
+     reused rather than duplicated.
+3. Each Required Permission row for such a resource has its `resourceAppId` rewritten to
+   `{{ dependency_refs.<key>.applicationId }}` in the `Application.yaml.j2` being written, so
+   UC042's editor recognises it as a dependency reference rather than flagging it as an unmodelled
+   raw GUID. Microsoft Graph permission rows are left exactly as fetched.
+4. This never runs when `Application.yaml.j2` already exists — the user maintains that file's
+   permissions and the `Dependencies` map by hand in that case.
+
 ## Postconditions
 
 * `<artifactsRoot>/Applications/<AppName>/` exists and satisfies UC040's format, with the
@@ -133,6 +159,9 @@ preconditions above are met.
 * No existing hand-authored file in that folder was overwritten.
 * `ServicePrincipal.yaml.j2`'s `tags` (when written) never contain any of the four
   automatically-generated tags UC042's Generated tags preview describes.
+* When `Application.yaml.j2` was written fresh, every non-Graph resource it requests permissions
+  from is present in `AppConfig.yaml`'s `Dependencies` map and referenced from the permission rows
+  as `{{ dependency_refs.<key>.applicationId }}` (A6).
 * The **Project** node of the Entra tree reflects the result.
 
 ## Related

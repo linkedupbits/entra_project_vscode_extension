@@ -93,6 +93,14 @@ environments, or dependencies to show).
 
      This resolution is preview-only; UC042's local, editable Required Permissions list does not
      (yet) do the same.
+   * A **Dependencies** list (under the Application section) shows the other applications this one
+     depends on, worked out from its Required Permissions: every distinct `resourceAppId` that
+     **isn't** Microsoft Graph's well-known ID is a dependency, shown as `<resolved name>
+     (<resourceAppId>)`, or as the raw ID flagged "unresolved" when no Service Principal for it
+     exists in this tenant. Microsoft Graph is never listed (it isn't "another application" — see
+     `deriveApplicationDependencies()`). This is the same derivation UC035's download writes into
+     `AppConfig.yaml`'s `Dependencies` map. "None" when every required permission is Microsoft
+     Graph (or there are none).
    * The panel always shows a **Download to project** button — see
      [UC035 — Download an Application Artifact to the Project](UC035_DownloadApplicationArtifact.md).
      When no unique name was found, selecting it prompts for an application name instead of

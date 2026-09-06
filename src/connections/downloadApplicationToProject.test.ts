@@ -138,6 +138,74 @@ describe('downloadApplicationToProject', () => {
     expect(savedFiles.application).toEqual((data.application as { kind: 'ok'; value: ApplicationFiles['application'] }).value);
   });
 
+  it('derives AppConfig Dependencies from non-Graph required permissions and rewrites their resourceAppId', async () => {
+    vi.mocked(getApplicationsRootUri).mockReturnValue(rootUri as never);
+    const { store, save } = fakeStore();
+    const data = okData({
+      application: {
+        kind: 'ok',
+        value: {
+          displayName: 'My App',
+          signInAudience: 'AzureADMyOrg',
+          requiredPermissions: [
+            { resourceAppId: '00000003-0000-0000-c000-000000000000', id: 'graph-perm', type: 'Role' },
+            { resourceAppId: 'api-app-id', id: 'access_as_user', type: 'Scope' },
+          ],
+          oauth2PermissionScopes: [],
+        },
+      },
+      resourceApplications: {
+        'api-app-id': { displayName: 'Sample API App', permissions: {} },
+      },
+    });
+
+    await downloadApplicationToProject(store, identity, data, connection);
+
+    const [, savedFiles] = save.mock.calls[0];
+    expect(savedFiles.appConfig.Dependencies).toEqual({ SampleAPIApp: { AppName: 'Sample API App' } });
+    expect(savedFiles.application.requiredPermissions).toEqual([
+      { resourceAppId: '00000003-0000-0000-c000-000000000000', id: 'graph-perm', type: 'Role' },
+      { resourceAppId: '{{ dependency_refs.SampleAPIApp.applicationId }}', id: 'access_as_user', type: 'Scope' },
+    ]);
+  });
+
+  it('does not derive dependencies when Application.yaml.j2 already exists — existing Dependencies untouched', async () => {
+    vi.mocked(getApplicationsRootUri).mockReturnValue(rootUri as never);
+    const existingApplication: ApplicationFiles['application'] = {
+      displayName: '{{ application_name }}',
+      signInAudience: 'AzureADMyOrg',
+      requiredPermissions: [],
+      oauth2PermissionScopes: [],
+    };
+    const { store, save } = fakeStore(
+      {
+        appConfig: { ...emptyAppConfig(), Dependencies: { HandAuthored: { AppName: 'hand-authored' } } },
+        application: existingApplication,
+        federatedCredentials: [],
+        servicePrincipal: emptyServicePrincipalFields(),
+      },
+      { application: true, federatedCredentials: false, servicePrincipal: false }
+    );
+    const data = okData({
+      application: {
+        kind: 'ok',
+        value: {
+          displayName: 'My App',
+          signInAudience: 'AzureADMyOrg',
+          requiredPermissions: [{ resourceAppId: 'api-app-id', id: 'access_as_user', type: 'Scope' }],
+          oauth2PermissionScopes: [],
+        },
+      },
+      resourceApplications: { 'api-app-id': { displayName: 'Sample API App', permissions: {} } },
+    });
+
+    await downloadApplicationToProject(store, identity, data, connection);
+
+    const [, savedFiles] = save.mock.calls[0];
+    expect(savedFiles.appConfig.Dependencies).toEqual({ HandAuthored: { AppName: 'hand-authored' } });
+    expect(savedFiles.application).toEqual(existingApplication);
+  });
+
   it("writes the Service Principal's non-generated fields verbatim, stripping its generated tags", async () => {
     vi.mocked(getApplicationsRootUri).mockReturnValue(rootUri as never);
     const { store, save } = fakeStore();

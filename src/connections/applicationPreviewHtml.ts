@@ -2,6 +2,7 @@ import { RequiredPermission, Oauth2PermissionScopeEntry, FederatedCredentialEntr
 import { GraphResourceApplication } from '../graph/graphClient';
 import { ApplicationPreviewData } from './tenantApplicationPreview';
 import { parseTenantApplicationIdentity } from './tenantApplicationIdentity';
+import { deriveApplicationDependencies } from './applicationDependencies';
 
 function escapeHtml(value: string): string {
   return value
@@ -45,6 +46,34 @@ function permissionsListOrNone(
         const ids = `<code>${escapeHtml(p.resourceAppId)}</code> : <code>${escapeHtml(p.id)}</code>`;
         return `<li>${escapeHtml(appLabel)} : ${escapeHtml(permissionLabel)} (${ids})</li>`;
       })
+      .join('') +
+    '</ul>'
+  );
+}
+
+/**
+ * The other applications this one depends on, worked out from its Required Permissions: every
+ * distinct non-Microsoft-Graph `resourceAppId` becomes a dependency (see
+ * `deriveApplicationDependencies()` — the same logic UC035's download writes into
+ * `AppConfig.yaml`). Shown as `<resolved name> (<resourceAppId>)`, or just the raw ID flagged
+ * "unresolved" when no Service Principal for it exists in this tenant.
+ */
+function dependenciesListOrNone(
+  permissions: readonly RequiredPermission[],
+  resourceApplications: Record<string, GraphResourceApplication>
+): string {
+  const { derived } = deriveApplicationDependencies(permissions, resourceApplications, {});
+  if (derived.length === 0) {
+    return '<div class="empty">None</div>';
+  }
+  return (
+    '<ul>' +
+    derived
+      .map((dependency) =>
+        dependency.resolved
+          ? `<li>${escapeHtml(dependency.appName)} (<code>${escapeHtml(dependency.resourceAppId)}</code>)</li>`
+          : `<li><code>${escapeHtml(dependency.resourceAppId)}</code> — unresolved (no service principal for it in this tenant)</li>`
+      )
       .join('') +
     '</ul>'
   );
@@ -137,6 +166,8 @@ export function buildApplicationPreviewHtml(data: ApplicationPreviewData): strin
     ${listOrNone(data.spaRedirectUris)}
     <h3>Required permissions</h3>
     ${permissionsListOrNone(data.application.value.requiredPermissions, data.resourceApplications)}
+    <h3>Dependencies</h3>
+    ${dependenciesListOrNone(data.application.value.requiredPermissions, data.resourceApplications)}
     <h3>Exposed API scopes</h3>
     ${oauth2PermissionScopesListOrNone(data.application.value.oauth2PermissionScopes)}`;
 

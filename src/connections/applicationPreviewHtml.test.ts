@@ -151,6 +151,67 @@ describe('buildApplicationPreviewHtml', () => {
     expect(html).toContain('Some Other API : unknown-id');
   });
 
+  it('lists a resolved non-Graph resource as a dependency, and omits Microsoft Graph', () => {
+    const html = buildApplicationPreviewHtml(
+      data({
+        application: {
+          kind: 'ok',
+          value: {
+            displayName: 'My App',
+            signInAudience: 'AzureADMyOrg',
+            requiredPermissions: [
+              { resourceAppId: '00000003-0000-0000-c000-000000000000', id: 'graph-perm', type: 'Role' },
+              { resourceAppId: 'api-app-id', id: 'access_as_user', type: 'Scope' },
+            ],
+            oauth2PermissionScopes: [],
+          },
+        },
+        resourceApplications: {
+          'api-app-id': { displayName: 'Sample API App', permissions: {} },
+        },
+      })
+    );
+    expect(html).toContain('<h3>Dependencies</h3>');
+    expect(html).toContain('Sample API App (<code>api-app-id</code>)');
+    expect(html).not.toMatch(/Dependencies<\/h3>\s*<ul>[^<]*Microsoft Graph/);
+  });
+
+  it('flags a non-Graph dependency whose resource has no service principal in the tenant', () => {
+    const html = buildApplicationPreviewHtml(
+      data({
+        application: {
+          kind: 'ok',
+          value: {
+            displayName: 'My App',
+            signInAudience: 'AzureADMyOrg',
+            requiredPermissions: [{ resourceAppId: 'mystery-api', id: 'x', type: 'Scope' }],
+            oauth2PermissionScopes: [],
+          },
+        },
+      })
+    );
+    expect(html).toContain('<code>mystery-api</code> — unresolved (no service principal for it in this tenant)');
+  });
+
+  it('shows "None" for Dependencies when every required permission is Microsoft Graph', () => {
+    const html = buildApplicationPreviewHtml(
+      data({
+        application: {
+          kind: 'ok',
+          value: {
+            displayName: 'My App',
+            signInAudience: 'AzureADMyOrg',
+            requiredPermissions: [
+              { resourceAppId: '00000003-0000-0000-c000-000000000000', id: 'graph-perm', type: 'Role' },
+            ],
+            oauth2PermissionScopes: [],
+          },
+        },
+      })
+    );
+    expect(html).toMatch(/<h3>Dependencies<\/h3>\s*<div class="empty">None<\/div>/);
+  });
+
   it('renders an exposed API scope with its value, type, and enabled status', () => {
     const html = buildApplicationPreviewHtml(
       data({
