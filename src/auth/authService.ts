@@ -24,6 +24,13 @@ export interface ConnectedAccount {
 }
 
 /**
+ * Fixed loopback port for the interactive redirect (`http://localhost:<port>`), so an app
+ * registration's Redirect URI can be registered once instead of relying on MSAL's default
+ * random-port loopback listener. MSAL falls back to a random port if this one is unavailable.
+ */
+export const LOOPBACK_REDIRECT_PORT = 4859;
+
+/**
  * Entra External ID (CIAM) tenants sign in through their own subdomain-based endpoint, in the
  * form `https://<subdomain>.ciamlogin.com/<tenantId>/v2.0`, rather than the regular
  * `login.microsoftonline.com`-family hosts a Workforce tenant uses (see UC010/UC012).
@@ -126,6 +133,7 @@ export class AuthService implements vscode.Disposable {
           })
         : await client.acquireTokenInteractive({
             scopes,
+            preferredPort: LOOPBACK_REDIRECT_PORT,
             openBrowser: async (url) => {
               await vscode.env.openExternal(vscode.Uri.parse(url));
             },
