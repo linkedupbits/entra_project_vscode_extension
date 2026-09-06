@@ -8,8 +8,6 @@ The following is a manifest that provides highly-priviedged readonly access for 
 	"deletedDateTime": null,
 	"applicationTemplateId": "8adf8e6e-67b2-4cf2-a259-e3dc5476c621",
 	"disabledByMicrosoftStatus": null,
-	"createdByAppId": "f0ae4899-d877-4d3c-ae25-679e38eea492",
-	"createdDateTime": "2026-09-06T21:26:17Z",
 	"displayName": "ITOps_Entra_VSCodeExtension",
 	"description": null,
 	"groupMembershipClaims": null,
