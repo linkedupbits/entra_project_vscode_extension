@@ -488,7 +488,10 @@ These came out of an explicit planning pass with the user and should not be sile
   `bodyHtml` — it no longer assumes YAML-in-a-`<pre>`, so a future artifact type can supply its own
   structured body through the same shell. It's keyed by `<connection name>::<object id>` so
   re-selecting the same application reveals/refreshes its existing panel rather than opening a
-  duplicate. `artifactViewerPanel.ts` is excluded from coverage as thin webview glue, same as
+  duplicate. The Download button's click handler disables it and shows "Downloading…"; the
+  extension side `await`s `onDownload()` (which never rejects — it notifies on its own outcome) and
+  then posts `{ type: 'downloadFinished' }` back so the webview restores the button — without that
+  round-trip the button would stay stuck on "Downloading…" forever after the first click. `artifactViewerPanel.ts` is excluded from coverage as thin webview glue, same as
   `connectionFormPanel.ts`/`applicationEditorHtml.ts` (UC042's own HTML/CSS/JS template, split out
   from `applicationEditorProvider.ts` specifically so that file's lifecycle logic — save/revert/
   backup/message-handling — stays testable and NOT exempted) — but `tenantApplicationPreview.ts` and

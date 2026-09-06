@@ -58,9 +58,15 @@ export class ArtifactViewerPanel {
       enableScripts: true,
     });
     this.panel.onDidDispose(() => ArtifactViewerPanel.openPanels.delete(this.key));
-    this.panel.webview.onDidReceiveMessage((message: DownloadMessage) => {
+    this.panel.webview.onDidReceiveMessage(async (message: DownloadMessage) => {
       if (message.type === 'download' && this.onDownload) {
-        void this.onDownload();
+        try {
+          // `onDownload` (see extension.ts) reports its own success/failure via notifications and
+          // never rejects — so a plain finally is enough to release the button either way.
+          await this.onDownload();
+        } finally {
+          void this.panel.webview.postMessage({ type: 'downloadFinished' });
+        }
       }
     });
     this.update(title, sourceBadge, bodyHtml, onDownload);
@@ -187,10 +193,17 @@ ${
   (function () {
     const vscode = acquireVsCodeApi();
     const btn = document.getElementById('downloadBtn');
+    const idleLabel = btn.textContent;
     btn.addEventListener('click', function () {
       btn.disabled = true;
       btn.textContent = 'Downloading…';
       vscode.postMessage({ type: 'download' });
+    });
+    window.addEventListener('message', function (event) {
+      if (event.data && event.data.type === 'downloadFinished') {
+        btn.disabled = false;
+        btn.textContent = idleLabel;
+      }
     });
   })();
 </script>`

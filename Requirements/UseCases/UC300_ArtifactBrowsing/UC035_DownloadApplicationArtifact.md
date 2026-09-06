@@ -34,7 +34,10 @@ preconditions above are met.
 ## Main Flow
 
 1. From an open preview panel meeting the preconditions above, the user selects **Download to
-   project**.
+   project**. The button disables itself and shows "Downloading…" for the duration, then returns to
+   its normal label and enabled state once the download finishes — whether it succeeded, failed
+   (A2/A3), or was cancelled at A4's prompt — so the panel is immediately usable again (e.g. to
+   retry).
 2. The extension looks for a tag starting with `AppName:` on the Service Principal whose value
    splits into exactly three non-blank, underscore-separated parts —
    `<Environment>_<BusinessUnit>_<AppName>` (see `tenantApplicationIdentity.ts`'s
