@@ -178,7 +178,10 @@
         "name": "esbuild",
         "owner": "esbuild",
         "source": "esbuild",
-        "fileLocation": ["relative", "${workspaceFolder}"],
+        "fileLocation": [
+          "relative",
+          "${workspaceFolder}"
+        ],
         "pattern": [
           {
             "regexp": "^✘ \\[ERROR\\] (.+)$",
@@ -196,7 +199,10 @@
         "name": "esbuild-watch",
         "owner": "esbuild",
         "source": "esbuild",
-        "fileLocation": ["relative", "${workspaceFolder}"],
+        "fileLocation": [
+          "relative",
+          "${workspaceFolder}"
+        ],
         "pattern": [
           {
             "regexp": "^✘ \\[ERROR\\] (.+)$",
@@ -226,13 +232,15 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "coverage": "vitest run --coverage",
-    "download:graph-permissions": "node scripts/downloadGraphPermissions.js"
+    "download:graph-permissions": "node scripts/downloadGraphPermissions.js",
+    "package": "vsce package"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^24.0.0",
     "@types/vscode": "^1.90.0",
     "@vitest/coverage-v8": "^5.0.0",
+    "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.28.0",
     "eslint": "^10.0.0",
     "typescript": ">=6.0.0 <6.1.0",
