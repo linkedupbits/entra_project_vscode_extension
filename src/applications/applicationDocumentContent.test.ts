@@ -1,7 +1,19 @@
 import { describe, it, expect } from 'vitest';
 import * as YAML from 'yaml';
 import { buildApplicationDocumentText, parseApplicationDocumentText } from './applicationDocumentContent';
-import { ApplicationFiles, emptyAppConfig, emptyApplicationFields, emptyServicePrincipalFields } from './types';
+import {
+  ApplicationFiles,
+  emptyAppConfig,
+  emptyApplicationFields,
+  emptyServicePrincipalFields,
+  SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE,
+  stripServicePrincipalReplyUrls,
+} from './types';
+
+/** The combined document carries the ServicePrincipal's generated `replyUrls` loop, which isn't valid YAML — drop it before parsing, exactly as `parseApplicationDocumentText` does. */
+function parseDoc(text: string): Record<string, unknown> {
+  return YAML.parse(stripServicePrincipalReplyUrls(text), { merge: true });
+}
 
 const sampleFiles: ApplicationFiles = {
   appConfig: {
@@ -60,7 +72,7 @@ const sampleFiles: ApplicationFiles = {
 describe('buildApplicationDocumentText', () => {
   it('builds one YAML document with a top-level key per file', () => {
     const text = buildApplicationDocumentText(sampleFiles);
-    const parsed = YAML.parse(text, { merge: true });
+    const parsed = parseDoc(text);
 
     expect(Object.keys(parsed)).toEqual(['AppConfig', 'Application', 'FederatedCredentials', 'ServicePrincipal']);
     expect(parsed.AppConfig).toEqual(sampleFiles.appConfig);
@@ -69,7 +81,7 @@ describe('buildApplicationDocumentText', () => {
 
   it('serializes Application in the exact Graph JSON shape (grouped requiredResourceAccess, omitted empty sections)', () => {
     const text = buildApplicationDocumentText(sampleFiles);
-    const parsed = YAML.parse(text, { merge: true });
+    const parsed = parseDoc(text);
 
     expect(parsed.Application).toEqual({
       displayName: 'Sample Web App (Dev)',
@@ -97,15 +109,23 @@ describe('buildApplicationDocumentText', () => {
     });
   });
 
-  it('serializes ServicePrincipal in the exact Graph JSON shape', () => {
+  it('serializes ServicePrincipal in the exact Graph JSON shape (minus the generated replyUrls loop)', () => {
     const text = buildApplicationDocumentText(sampleFiles);
-    const parsed = YAML.parse(text, { merge: true });
+    const parsed = parseDoc(text);
 
     expect(parsed.ServicePrincipal).toEqual({
       appId: '{{ application.appId }}',
       appRoleAssignmentRequired: true,
       tags: ['WindowsAzureActiveDirectoryIntegratedApp'],
     });
+  });
+
+  it('writes the ServicePrincipal replyUrls loop as raw (non-YAML) text, indented under its key', () => {
+    const text = buildApplicationDocumentText(sampleFiles);
+    expect(text).toContain(`  replyUrls: ${SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE}`);
+    expect(text).not.toContain('__ENTRA_REPLY_URLS__');
+    // the raw loop makes the combined document not directly YAML-parseable
+    expect(() => YAML.parse(text, { merge: true })).toThrow();
   });
 
   it('omits web/requiredResourceAccess/tags entirely when empty, matching ApplicationStore.save()', () => {
@@ -116,7 +136,7 @@ describe('buildApplicationDocumentText', () => {
       servicePrincipal: emptyServicePrincipalFields(),
     };
     const text = buildApplicationDocumentText(bareFiles);
-    const parsed = YAML.parse(text, { merge: true });
+    const parsed = parseDoc(text);
 
     expect(parsed.Application).toEqual({ displayName: '', signInAudience: 'AzureADMyOrg' });
     expect(parsed.ServicePrincipal).toEqual({ appId: '', appRoleAssignmentRequired: false });

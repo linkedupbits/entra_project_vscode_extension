@@ -1,4 +1,5 @@
 appId: "{{ application.appId }}"
 appRoleAssignmentRequired: true
+replyUrls: [{% for item in (environment.Variables.web_redirectUris | default([])) + (environment.Variables.publicClient_redirectURIs | default([])) + (environment.Variables.spa_redirectURIs | default([])) %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]
 tags:
   - WindowsAzureActiveDirectoryIntegratedApp

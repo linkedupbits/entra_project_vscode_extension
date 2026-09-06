@@ -7,6 +7,8 @@ import {
   normalizeServicePrincipalFields,
   serializeApplication,
   serializeServicePrincipal,
+  applyServicePrincipalReplyUrls,
+  stripServicePrincipalReplyUrls,
   buildAppConfigNode,
 } from './types';
 
@@ -32,7 +34,7 @@ export function buildApplicationDocumentText(files: ApplicationFiles): string {
   map.items.push(doc.createPair('FederatedCredentials', files.federatedCredentials));
   map.items.push(doc.createPair('ServicePrincipal', serializeServicePrincipal(files.servicePrincipal)));
   doc.contents = map;
-  return doc.toString();
+  return applyServicePrincipalReplyUrls(doc.toString());
 }
 
 export type ParseApplicationDocumentResult = { kind: 'ok'; files: ApplicationFiles } | { kind: 'error'; message: string };
@@ -47,7 +49,8 @@ export type ParseApplicationDocumentResult = { kind: 'ok'; files: ApplicationFil
 export function parseApplicationDocumentText(text: string): ParseApplicationDocumentResult {
   let parsed: unknown;
   try {
-    parsed = YAML.parse(text, { merge: true });
+    // Drop the ServicePrincipal's generated `replyUrls` loop first — it isn't valid YAML.
+    parsed = YAML.parse(stripServicePrincipalReplyUrls(text), { merge: true });
   } catch (err) {
     return { kind: 'error', message: err instanceof Error ? err.message : String(err) };
   }

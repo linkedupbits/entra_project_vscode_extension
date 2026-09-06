@@ -710,7 +710,7 @@ export function getHtml(
     <details class="section-card" id="servicePrincipalSection">
       <summary class="section-summary"><span>Service Principal</span></summary>
       <div class="section-body">
-        <div class="hint">ServicePrincipal.yaml.j2 — mirrors the Graph JSON body for the Enterprise Application.</div>
+        <div class="hint">ServicePrincipal.yaml.j2 — mirrors the Graph JSON body for the Enterprise Application. On save, a <code>replyUrls</code> key is written automatically as a Jinja2/Nunjucks loop that renders to an array of each environment's three redirect-URI variable lists combined — it is not editable here.</div>
 
         <label for="appId">Application (client) ID</label>
         <input type="text" id="appId" value="${escapeHtml(servicePrincipal.appId)}" />

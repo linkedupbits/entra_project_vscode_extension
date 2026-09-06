@@ -45,6 +45,57 @@ export const ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS = {
 } as const;
 
 /**
+ * The templating expression written as `ServicePrincipal.yaml.j2`'s `replyUrls` value on every
+ * save (see `serializeServicePrincipal`). A `{% for %}` loop that emits literal YAML array syntax
+ * — so the *rendered* file contains a genuine array — over the current environment's three
+ * redirect-URI variable lists concatenated with `+`, each `| default([])` so a category the
+ * environment doesn't define contributes nothing. Deliberately a loop rather than a bare `{{ list }}`
+ * interpolation: `{{ list }}` stringifies engine-specifically (`a,b` in Nunjucks, `['a', 'b']` in
+ * Jinja2) and never yields a real YAML array, whereas `for` / `loop.last` / `if` / `+` / `default`
+ * are all common to Jinja2 and Nunjucks, so this renders identically under both.
+ *
+ * It is **not valid YAML on its own** (a bare `{%` can't start a YAML value), so it can't pass
+ * through `YAML.stringify` as a value: `serializeServicePrincipal` emits
+ * `SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER` instead, and `applyServicePrincipalReplyUrls()` swaps
+ * in this text afterwards; `stripServicePrincipalReplyUrls()` removes the line again before any
+ * `YAML.parse`, since the value is generated and never read back — the same "generated, not
+ * round-tripped" treatment as UC042's Generated tags preview.
+ */
+export const SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE = `[{% for item in ${Object.values(
+  ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS
+)
+  .map((key) => `(environment.Variables.${key} | default([]))`)
+  .join(' + ')} %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]`;
+
+/** Stand-in for `replyUrls`'s value while it passes through `YAML.stringify` — see `SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE`. */
+export const SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER = '__ENTRA_REPLY_URLS__';
+
+const REPLY_URLS_PLACEHOLDER_LINE = new RegExp(
+  `^([ \\t]*replyUrls:) ["']?${SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER}["']?$`,
+  'm'
+);
+const REPLY_URLS_LINE = /^[ \t]*replyUrls:.*(\r?\n|$)/m;
+
+/**
+ * Post-processes `YAML.stringify` / `Document.toString` output for a ServicePrincipal, replacing
+ * the placeholder `serializeServicePrincipal` wrote with the real (non-YAML) `replyUrls` loop
+ * template. Preserves the line's indentation, so it works both for the standalone
+ * `ServicePrincipal.yaml.j2` and for the nested `ServicePrincipal:` key in the combined document.
+ */
+export function applyServicePrincipalReplyUrls(yamlText: string): string {
+  return yamlText.replace(REPLY_URLS_PLACEHOLDER_LINE, (_match, prefix: string) => `${prefix} ${SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE}`);
+}
+
+/**
+ * Removes the generated `replyUrls:` line before `YAML.parse` — once `applyServicePrincipalReplyUrls`
+ * has run, that line holds a `{% for %}` loop that isn't valid YAML. Safe because the value is
+ * regenerated on every save and never read back (`normalizeServicePrincipalFields` doesn't model it).
+ */
+export function stripServicePrincipalReplyUrls(yamlText: string): string {
+  return yamlText.replace(REPLY_URLS_LINE, '');
+}
+
+/**
  * One entry in `AppConfig.yaml`'s `Dependencies` map — a reference to another application
  * definition's folder (`AppName`, matching that application's folder name under
  * `<root>/Applications/`, not a Graph ID) that this one depends on for deploy-time sequencing.
@@ -459,11 +510,18 @@ export function overridesOnly(
   return result;
 }
 
-/** ServicePrincipal.yaml.j2's Graph JSON shape — see serializeApplication's doc comment for why this is shared/exported. */
+/**
+ * ServicePrincipal.yaml.j2's Graph JSON shape — see serializeApplication's doc comment for why this
+ * is shared/exported. `replyUrls` is emitted as `SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER` here;
+ * the caller must run the stringified output through `applyServicePrincipalReplyUrls()` to swap in
+ * the real `replyUrls` loop template (which isn't valid YAML, so can't be a value here). It's a
+ * generated value — any `replyUrls` already in the file is replaced on every save.
+ */
 export function serializeServicePrincipal(fields: ServicePrincipalFields): Record<string, unknown> {
   const result: Record<string, unknown> = {
     appId: fields.appId,
     appRoleAssignmentRequired: fields.appRoleAssignmentRequired,
+    replyUrls: SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER,
   };
   if (fields.tags.length > 0) {
     result.tags = fields.tags;

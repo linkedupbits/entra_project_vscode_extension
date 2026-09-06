@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 import * as YAML from 'yaml';
 import { FileSystemError } from '../test/vscodeMock';
 import { ApplicationStore } from './applicationStore';
-import { AppConfig, ApplicationFiles } from './types';
+import { AppConfig, ApplicationFiles, SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE, stripServicePrincipalReplyUrls } from './types';
 
 const folderUri = { fsPath: '/repo/entra/Applications/sample-web-app', toString: () => '/repo/entra/Applications/sample-web-app' };
 
@@ -152,7 +152,10 @@ describe('ApplicationStore.save', () => {
       sampleFiles.federatedCredentials
     );
 
-    expect(YAML.parse(writes.get('/repo/entra/Applications/sample-web-app/ServicePrincipal.yaml.j2')!)).toEqual({
+    const servicePrincipalText = writes.get('/repo/entra/Applications/sample-web-app/ServicePrincipal.yaml.j2')!;
+    // the generated replyUrls loop is written as raw (non-YAML) text — drop it before parsing
+    expect(servicePrincipalText).toContain(`replyUrls: ${SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE}`);
+    expect(YAML.parse(stripServicePrincipalReplyUrls(servicePrincipalText))).toEqual({
       appId: '{{ application.appId }}',
       appRoleAssignmentRequired: true,
       tags: ['WindowsAzureActiveDirectoryIntegratedApp'],
@@ -219,9 +222,37 @@ describe('ApplicationStore.save', () => {
     const [, bytes] = vi
       .mocked(vscode.workspace.fs.writeFile)
       .mock.calls.find(([uri]) => (uri as unknown as { fsPath: string }).fsPath.endsWith('ServicePrincipal.yaml.j2'))!;
-    const parsed = YAML.parse(Buffer.from(bytes as Uint8Array).toString('utf8'));
+    const text = Buffer.from(bytes as Uint8Array).toString('utf8');
 
-    expect(parsed).toEqual({ appId: 'x', appRoleAssignmentRequired: false });
+    expect(text).toContain(`replyUrls: ${SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE}`);
+    expect(YAML.parse(stripServicePrincipalReplyUrls(text))).toEqual({ appId: 'x', appRoleAssignmentRequired: false });
+  });
+
+  it('load() reads a ServicePrincipal.yaml.j2 that contains the raw replyUrls loop', async () => {
+    const store = new ApplicationStore();
+    await store.save(folderUri as never, {
+      ...sampleFiles,
+      servicePrincipal: { appId: '{{ application.appId }}', appRoleAssignmentRequired: true, tags: ['Custom'] },
+    });
+    const servicePrincipalText = Buffer.from(
+      vi
+        .mocked(vscode.workspace.fs.writeFile)
+        .mock.calls.find(([uri]) => (uri as unknown as { fsPath: string }).fsPath.endsWith('ServicePrincipal.yaml.j2'))![1] as Uint8Array
+    ).toString('utf8');
+    expect(servicePrincipalText).toContain(`replyUrls: ${SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE}`);
+
+    vi.mocked(vscode.workspace.fs.readFile)
+      .mockRejectedValueOnce(FileSystemError.FileNotFound()) // AppConfig.yaml
+      .mockRejectedValueOnce(FileSystemError.FileNotFound()) // Application.yaml.j2
+      .mockRejectedValueOnce(FileSystemError.FileNotFound()) // FederatedCredentials.yaml.j2
+      .mockResolvedValueOnce(readFileOnceText(servicePrincipalText)); // ServicePrincipal.yaml.j2
+
+    const loaded = await store.load(folderUri as never);
+    expect(loaded.servicePrincipal).toEqual({
+      appId: '{{ application.appId }}',
+      appRoleAssignmentRequired: true,
+      tags: ['Custom'],
+    });
   });
 });
 

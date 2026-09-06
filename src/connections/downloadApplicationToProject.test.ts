@@ -1,6 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
+import * as vscode from 'vscode';
+import { FileSystemError } from '../test/vscodeMock';
 import { ApplicationStore } from '../applications/applicationStore';
-import { AppConfig, ApplicationFiles, emptyAppConfig, emptyApplicationFields, emptyServicePrincipalFields } from '../applications/types';
+import {
+  AppConfig,
+  ApplicationFiles,
+  emptyAppConfig,
+  emptyApplicationFields,
+  emptyServicePrincipalFields,
+  SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE,
+} from '../applications/types';
 import { Connection } from './types';
 import { TenantApplicationIdentity } from './tenantApplicationIdentity';
 import { ApplicationPreviewData } from './tenantApplicationPreview';
@@ -554,6 +563,24 @@ describe('downloadApplicationToProject', () => {
       { name: 'Test', publisherDomain: 'contoso-test.onmicrosoft.com', tenancy_type: 'ciam', environment_code: 'test', Variables: {} },
       { name: 'dev', publisherDomain: '', tenancy_type: '', environment_code: 'dev', Variables: {} },
     ]);
+  });
+
+  it('writes the generated replyUrls loop into the downloaded ServicePrincipal.yaml.j2 (via the real ApplicationStore)', async () => {
+    vi.mocked(getApplicationsRootUri).mockReturnValue(rootUri as never);
+    vi.mocked(vscode.workspace.fs.readFile).mockRejectedValue(FileSystemError.FileNotFound());
+    vi.mocked(vscode.workspace.fs.readDirectory).mockRejectedValue(FileSystemError.FileNotFound());
+    vi.mocked(vscode.workspace.fs.writeFile).mockResolvedValue(undefined as never);
+    vi.mocked(vscode.workspace.fs.createDirectory).mockResolvedValue(undefined as never);
+
+    const result = await downloadApplicationToProject(new ApplicationStore(), identity, okData(), connection);
+
+    expect(result.kind).toBe('ok');
+    const spWrite = vi
+      .mocked(vscode.workspace.fs.writeFile)
+      .mock.calls.find(([uri]) => (uri as unknown as { fsPath: string }).fsPath.endsWith('ServicePrincipal.yaml.j2'))!;
+    expect(Buffer.from(spWrite[1] as Uint8Array).toString('utf8')).toContain(
+      `replyUrls: ${SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE}`
+    );
   });
 
   it('preserves an existing application_name rather than overwriting it with the identity', async () => {

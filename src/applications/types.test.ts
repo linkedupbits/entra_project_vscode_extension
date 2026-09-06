@@ -7,11 +7,16 @@ import {
   emptyApplicationFields,
   normalizeApplicationFields,
   serializeApplication,
+  serializeServicePrincipal,
   groupRequiredPermissions,
   normalizeFederatedCredentials,
   emptyServicePrincipalFields,
   normalizeServicePrincipalFields,
   buildAppConfigNode,
+  SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE,
+  SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER,
+  applyServicePrincipalReplyUrls,
+  stripServicePrincipalReplyUrls,
 } from './types';
 
 describe('emptyAppConfig', () => {
@@ -459,6 +464,49 @@ describe('normalizeFederatedCredentials', () => {
 describe('emptyServicePrincipalFields', () => {
   it('defaults to blank/false/empty', () => {
     expect(emptyServicePrincipalFields()).toEqual({ appId: '', appRoleAssignmentRequired: false, tags: [] });
+  });
+});
+
+describe('serializeServicePrincipal', () => {
+  it('emits replyUrls as the placeholder (the real loop template is injected after YAML.stringify)', () => {
+    const result = serializeServicePrincipal({ appId: 'x', appRoleAssignmentRequired: true, tags: ['t'] });
+    expect(result).toEqual({
+      appId: 'x',
+      appRoleAssignmentRequired: true,
+      replyUrls: SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER,
+      tags: ['t'],
+    });
+  });
+});
+
+describe('SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE', () => {
+  it('is a for-loop over the three redirect-URI variable lists concatenated, emitting literal array syntax', () => {
+    expect(SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE).toBe(
+      '[{% for item in (environment.Variables.web_redirectUris | default([])) + ' +
+        '(environment.Variables.publicClient_redirectURIs | default([])) + ' +
+        '(environment.Variables.spa_redirectURIs | default([])) %}' +
+        '"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]'
+    );
+  });
+});
+
+describe('applyServicePrincipalReplyUrls / stripServicePrincipalReplyUrls', () => {
+  it('swaps the placeholder line for the raw loop, keeping the line indentation', () => {
+    const top = YAML.stringify(serializeServicePrincipal(emptyServicePrincipalFields()));
+    expect(applyServicePrincipalReplyUrls(top)).toContain(`replyUrls: ${SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE}`);
+    expect(applyServicePrincipalReplyUrls(top)).not.toContain(SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER);
+
+    const indented = `ServicePrincipal:\n  appId: ""\n  replyUrls: ${SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER}\n`;
+    expect(applyServicePrincipalReplyUrls(indented)).toContain(`  replyUrls: ${SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE}`);
+  });
+
+  it('removes the replyUrls line (raw loop or placeholder) so the rest is valid YAML', () => {
+    const withLoop = applyServicePrincipalReplyUrls(YAML.stringify(serializeServicePrincipal({ appId: 'a', appRoleAssignmentRequired: true, tags: ['t'] })));
+    expect(() => YAML.parse(withLoop)).toThrow();
+
+    const stripped = stripServicePrincipalReplyUrls(withLoop);
+    expect(stripped).not.toContain('replyUrls');
+    expect(YAML.parse(stripped)).toEqual({ appId: 'a', appRoleAssignmentRequired: true, tags: ['t'] });
   });
 });
 

@@ -126,9 +126,12 @@ Models the Enterprise Application (Service Principal) associated with the App Re
 ```yaml
 appId: "{{ application.appId }}"
 appRoleAssignmentRequired: true
+replyUrls: [{% for item in (environment.Variables.web_redirectUris | default([])) + (environment.Variables.publicClient_redirectURIs | default([])) + (environment.Variables.spa_redirectURIs | default([])) %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]
 tags:
   - "WindowsAzureActiveDirectoryIntegratedApp"
 ```
+
+`replyUrls` is the Service-Principal-level equivalent of the App Registration's per-category redirect URIs: it renders to the concatenation of the current environment's three redirect-URI variable lists (see the Redirect URIs note under `Application.yaml.j2` above), each `| default([])` so a category the environment doesn't define contributes nothing. It's written as a `{% for %}` loop that emits literal array syntax (`["a", "b"]`, or `[]` when all three lists are empty) — deliberately, so the *rendered* file contains a real YAML array rather than an engine-specific stringification of a list; every construct in it (`for` / `loop.last` / `if` / `+` / `default`) is common to Jinja2 and Nunjucks. Consequently **that one line is not valid YAML until rendered** — this is the sole exception to "each of the four files is valid YAML" and is handled by [UC042](UC042_ViewApplicationDetails.md)'s editor stripping the generated line before it parses the file and re-adding it on save (it is generated, not editable).
 
 Note the `appId` field's value: a Service Principal is created *from* an Application's `appId` (its client ID), which for a brand-new application does not exist until `Application.yaml.j2` has actually been deployed and Graph has returned one. `ServicePrincipal.yaml.j2` and `FederatedCredentials.yaml.j2` (which similarly needs the Application's object ID as its parent resource) are therefore dependent on `Application.yaml.j2` having been deployed first, *for the same environment* — deploy tooling will need to sequence these three files per environment, not treat them as independent, and resolve a placeholder like `{{ application.appId }}` from that prior deploy step's result rather than from `AppConfig.yaml` like the other placeholders in this use case.
 

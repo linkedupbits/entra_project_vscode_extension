@@ -385,6 +385,23 @@ These came out of an explicit planning pass with the user and should not be sile
   when loaded, expanded when newly added, `<summary>` showing a live `Name — Subject` label
   (`fedcredSummaryLabel()`/`refreshFedCredSummaries()`, the same server/client-duplicated pattern).
   `ServicePrincipal.yaml.j2` is `appId`/`appRoleAssignmentRequired` (checkbox)/a dynamic `tags` list.
+  It **also always gets a generated `replyUrls` key** = `types.ts`'s
+  `SERVICE_PRINCIPAL_REPLY_URLS_TEMPLATE` (built from `ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS`): a
+  Jinja2/Nunjucks `{% for %}` **loop** —
+  `[{% for item in (environment.Variables.web_redirectUris | default([])) + (…publicClient_redirectURIs | default([])) + (…spa_redirectURIs | default([])) %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]`
+  — that renders to a real array (`["a","b"]`, or `[]` when empty) of the environment's three
+  redirect-URI lists concatenated. A loop, not `{{ list }}`, because bare list interpolation
+  stringifies engine-specifically and never yields a YAML array; the loop's constructs are all
+  common to both engines. **That line is not valid YAML** until rendered, so it can't pass through
+  `YAML.stringify`: `serializeServicePrincipal()` emits `SERVICE_PRINCIPAL_REPLY_URLS_PLACEHOLDER`
+  (`__ENTRA_REPLY_URLS__`), and callers post-process the stringified text —
+  `applyServicePrincipalReplyUrls()` swaps the placeholder line for the real loop (keeping indent,
+  so it works for the standalone file and the nested `ServicePrincipal:` key in the combined doc),
+  `stripServicePrincipalReplyUrls()` removes any `replyUrls:` line before `YAML.parse`. `ApplicationStore`
+  (`readYamlOrDefault`'s new `preParse` arg on the SP file + wrapping the SP write) and
+  `applicationDocumentContent.ts` (`buildApplicationDocumentText`/`parseApplicationDocumentText`) both
+  do this. Generated, not modelled on `ServicePrincipalFields`, not round-tripped (same idea as the
+  Generated tags preview); the download path gets it for free via `ApplicationStore.save()`.
   The Tags area also shows a **read-only, display-only** "Generated tags" preview — four tags
   (`AppName:<Environment>_<businessUnit>_<appName>`, `Environment:{{Environment}}`, `<appName>`,
   `BusinessUnit:<businessUnit>`) computed live in the webview's own JS from the Application

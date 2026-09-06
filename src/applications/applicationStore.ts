@@ -11,6 +11,8 @@ import {
   normalizeServicePrincipalFields,
   serializeApplication,
   serializeServicePrincipal,
+  applyServicePrincipalReplyUrls,
+  stripServicePrincipalReplyUrls,
   buildAppConfigNode,
 } from './types';
 
@@ -19,13 +21,20 @@ const APPLICATION_TEMPLATE_FILE = 'Application.yaml.j2';
 const FEDERATED_CREDENTIALS_TEMPLATE_FILE = 'FederatedCredentials.yaml.j2';
 const SERVICE_PRINCIPAL_TEMPLATE_FILE = 'ServicePrincipal.yaml.j2';
 
-async function readYamlOrDefault<T>(uri: vscode.Uri, normalize: (parsed: unknown) => T, fallback: () => T): Promise<T> {
+async function readYamlOrDefault<T>(
+  uri: vscode.Uri,
+  normalize: (parsed: unknown) => T,
+  fallback: () => T,
+  preParse: (text: string) => string = (text) => text
+): Promise<T> {
   try {
     const bytes = await vscode.workspace.fs.readFile(uri);
     // `merge: true` resolves a `<<: *Anchor` YAML merge key (see AppConfig.yaml's per-environment
     // `Variables`, UC040) into real, flattened entries — without it, `<<` would parse as a literal
     // (and useless) map key. Harmless for the other three files, which never use merge keys.
-    return normalize(YAML.parse(Buffer.from(bytes).toString('utf8'), { merge: true }));
+    // `preParse` lets ServicePrincipal.yaml.j2 drop its generated `replyUrls` loop, which isn't
+    // valid YAML (see `stripServicePrincipalReplyUrls`).
+    return normalize(YAML.parse(preParse(Buffer.from(bytes).toString('utf8')), { merge: true }));
   } catch (err) {
     if (err instanceof vscode.FileSystemError && err.code === 'FileNotFound') {
       return fallback();
@@ -63,7 +72,8 @@ export class ApplicationStore {
       readYamlOrDefault(
         vscode.Uri.joinPath(folderUri, SERVICE_PRINCIPAL_TEMPLATE_FILE),
         normalizeServicePrincipalFields,
-        emptyServicePrincipalFields
+        emptyServicePrincipalFields,
+        stripServicePrincipalReplyUrls
       ),
     ]);
 
@@ -116,7 +126,7 @@ export class ApplicationStore {
       ),
       vscode.workspace.fs.writeFile(
         vscode.Uri.joinPath(folderUri, SERVICE_PRINCIPAL_TEMPLATE_FILE),
-        Buffer.from(YAML.stringify(serializeServicePrincipal(files.servicePrincipal)), 'utf8')
+        Buffer.from(applyServicePrincipalReplyUrls(YAML.stringify(serializeServicePrincipal(files.servicePrincipal))), 'utf8')
       ),
     ]);
   }
