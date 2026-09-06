@@ -26,6 +26,6 @@ describe('workspacePaths', () => {
     expect(getWorkspaceFolder()).toEqual({ uri: { fsPath: '/repo' } });
     expect(getArtifactsRootUri()?.toString()).toBe('/repo/entra');
     expect(getConnectionsFileUri()?.toString()).toBe('/repo/entra/connections.yaml');
-    expect(getApplicationsRootUri()?.toString()).toBe('/repo/entra/applications');
+    expect(getApplicationsRootUri()?.toString()).toBe('/repo/entra/Applications');
   });
 });

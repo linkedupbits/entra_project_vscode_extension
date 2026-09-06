@@ -14,7 +14,7 @@ export const APPLICATION_EDITOR_SCHEME = 'entra-application-editor';
  * is always derived by VS Code from the document URI's path basename — `webviewPanel.title` can't
  * override it (a known VS Code limitation, not an oversight here: see
  * https://github.com/microsoft/vscode/issues/160543) — so the path is kept to just the plain
- * application name (folders under `<artifactsRoot>/applications/` are already named after the
+ * application name (folders under `<artifactsRoot>/Applications/` are already named after the
  * application — see `ApplicationsBranch` — so no extra lookup is needed to get it) purely so the
  * tab reads e.g. "sample-web-app" instead of a URL-encoded full folder URI.
  */

@@ -8,7 +8,7 @@ import {
 
 describe('applicationEditorUri', () => {
   it('round-trips the real application folder URI through the query string', () => {
-    const folderUri = vscode.Uri.parse('file:///repo/entra/applications/sample-web-app') as unknown as vscode.Uri;
+    const folderUri = vscode.Uri.parse('file:///repo/entra/Applications/sample-web-app') as unknown as vscode.Uri;
 
     const editorUri = toApplicationEditorUri(folderUri);
     const recovered = fromApplicationEditorUri(editorUri);
@@ -17,7 +17,7 @@ describe('applicationEditorUri', () => {
   });
 
   it('uses the entra-application-editor scheme', () => {
-    const folderUri = vscode.Uri.parse('file:///repo/entra/applications/sample-web-app') as unknown as vscode.Uri;
+    const folderUri = vscode.Uri.parse('file:///repo/entra/Applications/sample-web-app') as unknown as vscode.Uri;
 
     const editorUri = toApplicationEditorUri(folderUri);
 
@@ -26,7 +26,7 @@ describe('applicationEditorUri', () => {
   });
 
   it("uses the plain application name — not the encoded folder URI — as the URI's path, so the tab title reads as just the application name", () => {
-    const folderUri = vscode.Uri.parse('file:///repo/entra/applications/sample-web-app') as unknown as vscode.Uri;
+    const folderUri = vscode.Uri.parse('file:///repo/entra/Applications/sample-web-app') as unknown as vscode.Uri;
 
     const editorUri = toApplicationEditorUri(folderUri);
 
@@ -35,7 +35,7 @@ describe('applicationEditorUri', () => {
   });
 
   it('round-trips an application name containing characters that need encoding', () => {
-    const folderUri = vscode.Uri.parse('file:///repo/entra/applications/My App (v2)') as unknown as vscode.Uri;
+    const folderUri = vscode.Uri.parse('file:///repo/entra/Applications/My App (v2)') as unknown as vscode.Uri;
 
     const editorUri = toApplicationEditorUri(folderUri);
     const recovered = fromApplicationEditorUri(editorUri);

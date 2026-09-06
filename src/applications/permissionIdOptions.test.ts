@@ -11,7 +11,7 @@ vi.mock('../workspacePaths', () => ({
 
 import { getApplicationsRootUri } from '../workspacePaths';
 
-const rootUri = { fsPath: '/repo/entra/applications', toString: () => '/repo/entra/applications' };
+const rootUri = { fsPath: '/repo/entra/Applications', toString: () => '/repo/entra/Applications' };
 
 function fakeStore(filesByAppName: Record<string, ApplicationFiles>) {
   return {

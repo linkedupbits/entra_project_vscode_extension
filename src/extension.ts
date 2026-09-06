@@ -167,7 +167,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   // UC035 — the currently implemented instance of UC031's generic download, scoped to Applications:
-  // captures the previewed application into `<artifactsRoot>/applications/<appName>/`, identified
+  // captures the previewed application into `<artifactsRoot>/Applications/<appName>/`, identified
   // by the AppName: tag rather than a flat downloaded-artifact snapshot (see UC040's open question
   // this resolves for Applications specifically). Falls back to UC035 A4's wizard when no tag is
   // present, rather than refusing to download.
@@ -193,7 +193,7 @@ export function activate(context: vscode.ExtensionContext): void {
       );
       if (result.kind === 'ok') {
         treeProvider.refresh();
-        void vscode.window.showInformationMessage(`Downloaded "${label}" to applications/${identity!.appName}.`);
+        void vscode.window.showInformationMessage(`Downloaded "${label}" to Applications/${identity!.appName}.`);
       } else if (result.kind === 'noWorkspace') {
         void vscode.window.showErrorMessage('Open a workspace folder before downloading an application.');
       } else {

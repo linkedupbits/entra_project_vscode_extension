@@ -57,7 +57,7 @@ This doc analyzes what each involves and whether they belong in this repo or spl
 
 ### 2. GitHub Action
 
-- Thin wrapper: read `entra/applications/*`, call the library, surface results as step
+- Thin wrapper: read `entra/Applications/*`, call the library, surface results as step
   output/annotations.
 - Given this pushes to a live tenant, it realistically wants a **plan/apply split** (dry-run diff
   on PR, apply on merge) — otherwise every PR silently mutates production Entra state, a bigger

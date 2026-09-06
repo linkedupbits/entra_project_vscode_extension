@@ -151,7 +151,7 @@ These came out of an explicit planning pass with the user and should not be sile
   endpoint/API version, download timestamp). YAML specifically (not JSON) so files support comments.
 - **Application definitions (UC040 format; UC041 browsing; UC042 structured editing — all implemented except the format's actual deploy path)**: a
   locally-authored, deployable unit distinct from the downloaded-artifact snapshot above — a folder under
-  `<root>/applications/<name>/` of four files. `AppConfig.yaml` isn't templated itself but is where
+  `<root>/Applications/<name>/` of four files. `AppConfig.yaml` isn't templated itself but is where
   the other three files' Nunjucks placeholders get their values from: application-wide metadata, a
   `Variables` block of defaults shared across environments, and an `Environments` list, each entry
   supplying one deployment target's own values (e.g. `tenancy_type: ciam`) — one render/deploy pass

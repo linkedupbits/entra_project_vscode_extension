@@ -9,7 +9,7 @@ vi.mock('../workspacePaths', () => ({
 
 import { getApplicationsRootUri } from '../workspacePaths';
 
-const rootUri = { fsPath: '/repo/entra/applications', toString: () => '/repo/entra/applications' };
+const rootUri = { fsPath: '/repo/entra/Applications', toString: () => '/repo/entra/Applications' };
 
 function givenNoWorkspace(): void {
   vi.mocked(getApplicationsRootUri).mockReturnValue(undefined);
@@ -72,7 +72,7 @@ describe('ApplicationsBranch.getChildren', () => {
 
     expect(children.map((c) => c.label)).toEqual(['sample-api', 'sample-web-app']);
     expect(children[0].contextValue).toBe('application');
-    expect(children[0].folderUri.fsPath).toBe('/repo/entra/applications/sample-api');
+    expect(children[0].folderUri.fsPath).toBe('/repo/entra/Applications/sample-api');
   });
 
   it('opens the structured application view when clicked (UC042), not a raw file', async () => {
@@ -87,7 +87,7 @@ describe('ApplicationsBranch.getChildren', () => {
     expect(command.command).toBe('entra.viewApplication');
     expect(command.arguments[0].name).toBe('sample-web-app');
     expect((command.arguments[0].folderUri as { fsPath: string }).fsPath).toBe(
-      '/repo/entra/applications/sample-web-app'
+      '/repo/entra/Applications/sample-web-app'
     );
   });
 

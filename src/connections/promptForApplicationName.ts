@@ -3,7 +3,7 @@ import * as vscode from 'vscode';
 /**
  * UC035 A4 — the fallback when `parseTenantApplicationIdentity()` finds no usable `AppName:` tag
  * on the previewed application's Service Principal: rather than refusing to download, ask the
- * user directly which application name — i.e. which `<artifactsRoot>/applications/<name>/`
+ * user directly which application name — i.e. which `<artifactsRoot>/Applications/<name>/`
  * folder — to save it under. Only `appName` is collected here; `downloadApplicationToProject()`
  * has no environment/business unit to work with in this path and simply skips the AppConfig.yaml
  * merge steps that would otherwise use them, rather than this wizard guessing at values for a

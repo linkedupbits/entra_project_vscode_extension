@@ -17,7 +17,7 @@ vi.mock('./permissionIdOptions', () => ({
   buildPermissionOptionsByResourceAppId: vi.fn(async () => ({})),
 }));
 
-const folderUri = vscode.Uri.parse('file:///repo/entra/applications/sample-web-app') as unknown as vscode.Uri;
+const folderUri = vscode.Uri.parse('file:///repo/entra/Applications/sample-web-app') as unknown as vscode.Uri;
 
 const sampleFiles: ApplicationFiles = {
   appConfig: { ...emptyAppConfig(), application_name: 'sample-web-app' },

@@ -5,7 +5,7 @@ import { FileSystemError } from '../test/vscodeMock';
 import { ApplicationStore } from './applicationStore';
 import { AppConfig, ApplicationFiles } from './types';
 
-const folderUri = { fsPath: '/repo/entra/applications/sample-web-app', toString: () => '/repo/entra/applications/sample-web-app' };
+const folderUri = { fsPath: '/repo/entra/Applications/sample-web-app', toString: () => '/repo/entra/Applications/sample-web-app' };
 
 const sampleAppConfig: AppConfig = {
   application_name: 'sample-web-app',
@@ -134,10 +134,10 @@ describe('ApplicationStore.save', () => {
     );
 
     expect(
-      YAML.parse(writes.get('/repo/entra/applications/sample-web-app/AppConfig.yaml')!, { merge: true })
+      YAML.parse(writes.get('/repo/entra/Applications/sample-web-app/AppConfig.yaml')!, { merge: true })
     ).toEqual(sampleAppConfig);
 
-    expect(YAML.parse(writes.get('/repo/entra/applications/sample-web-app/Application.yaml.j2')!)).toEqual({
+    expect(YAML.parse(writes.get('/repo/entra/Applications/sample-web-app/Application.yaml.j2')!)).toEqual({
       displayName: 'Sample Web App (Dev)',
       signInAudience: 'AzureADMyOrg',
       requiredResourceAccess: [
@@ -148,11 +148,11 @@ describe('ApplicationStore.save', () => {
       ],
     });
 
-    expect(YAML.parse(writes.get('/repo/entra/applications/sample-web-app/FederatedCredentials.yaml.j2')!)).toEqual(
+    expect(YAML.parse(writes.get('/repo/entra/Applications/sample-web-app/FederatedCredentials.yaml.j2')!)).toEqual(
       sampleFiles.federatedCredentials
     );
 
-    expect(YAML.parse(writes.get('/repo/entra/applications/sample-web-app/ServicePrincipal.yaml.j2')!)).toEqual({
+    expect(YAML.parse(writes.get('/repo/entra/Applications/sample-web-app/ServicePrincipal.yaml.j2')!)).toEqual({
       appId: '{{ application.appId }}',
       appRoleAssignmentRequired: true,
       tags: ['WindowsAzureActiveDirectoryIntegratedApp'],

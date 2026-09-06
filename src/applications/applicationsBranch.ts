@@ -10,7 +10,7 @@ export class ApplicationsRootItem extends vscode.TreeItem {
 }
 
 /**
- * One node per subfolder of `<artifactsRoot>/applications/` (UC040) — a leaf, not a folder: it
+ * One node per subfolder of `<artifactsRoot>/Applications/` (UC040) — a leaf, not a folder: it
  * does not expand to show its four backing files (that was UC041's original design; removed in
  * favor of always going straight to UC042's structured view). Its four files remain reachable
  * individually only by opening them directly outside the tree (e.g. VS Code's file explorer).
@@ -46,7 +46,7 @@ async function readDirectorySafe(uri: vscode.Uri): Promise<Array<[string, vscode
   }
 }
 
-/** UC040/UC041 — browses `<artifactsRoot>/applications/`, purely local, no auth. */
+/** UC040/UC041 — browses `<artifactsRoot>/Applications/`, purely local, no auth. */
 export class ApplicationsBranch {
   async getChildren(): Promise<vscode.TreeItem[]> {
     const root = getApplicationsRootUri();

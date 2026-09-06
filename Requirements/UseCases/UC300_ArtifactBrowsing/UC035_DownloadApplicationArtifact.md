@@ -25,7 +25,7 @@ follow UC031's flat-snapshot model if/when implemented.
 
 * The user has UC034's preview panel open for an application, with its Application, Federated
   Credentials, and Service Principal sections all loaded successfully.
-* A workspace folder is open (needed to resolve `<artifactsRoot>/applications/`).
+* A workspace folder is open (needed to resolve `<artifactsRoot>/Applications/`).
 
 Unlike an earlier version of this use case, a tenant `AppName:` tag is **not** a precondition —
 see step 2 and A4 below. The **Download to project** button is always present once the
@@ -41,7 +41,7 @@ preconditions above are met.
    `parseTenantApplicationIdentity()`, and UC042's Generated tags preview, which describes this as
    one of four tags a real deploy is expected to apply automatically). If found, `<AppName>`,
    `<BusinessUnit>`, and `<Environment>` are used as below. If not found, A4 below applies instead.
-3. The extension resolves the target folder as `<artifactsRoot>/applications/<AppName>/` — the
+3. The extension resolves the target folder as `<artifactsRoot>/Applications/<AppName>/` — the
    same folder UC040/UC041/UC042 already use for that application name, created if it doesn't
    exist yet.
 4. The extension loads whatever already exists in that folder (tolerating any or all of the four
@@ -77,7 +77,7 @@ preconditions above are met.
 
 ### A1 — No workspace folder is open
 
-1. Preconditions aren't met: there's nowhere to resolve `<artifactsRoot>/applications/` against.
+1. Preconditions aren't met: there's nowhere to resolve `<artifactsRoot>/Applications/` against.
 2. The extension shows an error notification; nothing is written.
 
 ### A2 — Part of the preview failed to load
@@ -127,7 +127,7 @@ preconditions above are met.
 
 ## Postconditions
 
-* `<artifactsRoot>/applications/<AppName>/` exists and satisfies UC040's format, with the
+* `<artifactsRoot>/Applications/<AppName>/` exists and satisfies UC040's format, with the
   downloaded environment represented in `AppConfig.yaml`'s `Environments` list, if `<Environment>`
   was known (A4 not applying).
 * No existing hand-authored file in that folder was overwritten.

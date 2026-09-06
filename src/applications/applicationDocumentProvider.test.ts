@@ -6,7 +6,7 @@ import { toApplicationDocumentUri } from './applicationDocumentUri';
 import { ApplicationStore } from './applicationStore';
 import { ApplicationFiles, emptyAppConfig, emptyApplicationFields, emptyServicePrincipalFields } from './types';
 
-const folderUri = vscode.Uri.parse('file:///repo/entra/applications/sample-web-app') as unknown as vscode.Uri;
+const folderUri = vscode.Uri.parse('file:///repo/entra/Applications/sample-web-app') as unknown as vscode.Uri;
 
 const sampleFiles: ApplicationFiles = {
   appConfig: { ...emptyAppConfig(), application_name: 'sample-web-app' },

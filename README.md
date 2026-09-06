@@ -103,7 +103,7 @@ Open this folder in VS Code and press **F5** (or **Run > Start Debugging**). Thi
 
 To try the application-definition workflow immediately, use **File > Open Folder** inside that new
 window and open [`Example_Project`](Example_Project) — it already contains sample application
-definitions under `entra/applications/`.
+definitions under `entra/Applications/`.
 
 ### Verify your changes
 

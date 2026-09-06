@@ -17,11 +17,11 @@ This is deliberately a **data-format specification**, not itself an interactive 
 
 ## Structure
 
-One application is one folder, named for the application, directly under `<root>/applications/`:
+One application is one folder, named for the application, directly under `<root>/Applications/`:
 
 ```
 entra/
-  applications/
+  Applications/
     <application-name>/
       AppConfig.yaml
       Application.yaml.j2
@@ -66,7 +66,7 @@ Dependencies:
 * `application_name` / `business_unit` — plain, application-wide metadata (not per environment).
 * `Variables` — default values shared across every environment. Anchored (`&DefaultVariables`) so a specific environment entry can splice it in (`<<: *DefaultVariables`) alongside its own overrides, rather than repeating shared values in every environment.
 * `Environments` — a list of deployment targets. `name`, `publisherDomain`, `tenancy_type`, and `environment_code` are the fixed fields every entry carries; an entry may add further keys a specific template needs. `tenancy_type` (`ciam` in the example) is this file's own concept — it is not read from, or written back to, a saved [connection](../UC100_Security/UC012_AddConnection.md)'s `tenantKind`; the two happen to draw the same Workforce/CIAM distinction but are otherwise independent until a later phase decides whether/how to unify them. Each entry also carries its own `Variables` map, distinct from the top-level one above — this is where a value that must be a fixed, real one *per environment* lives (e.g. `MyNewPermissionVariableName` above, an `Application.yaml.j2` `oauth2PermissionScopes` entry's `id` — see below), referenced from a template as `{{ environment.Variables.<key> }}`. [UC042](UC042_ViewApplicationDetails.md)'s editor keeps every environment's `Variables` map populated with the shared defaults (achieving the same effect as the `<<: *DefaultVariables` merge key shown above, without preserving that literal syntax — see UC042's Postconditions) plus a freshly generated GUID for any such per-environment key it introduces that's not already present.
-* `Dependencies` — a map of other application definitions this one depends on for deploy-time sequencing. Each entry's key (`SampleAPIApp` above) is a reference name chosen by the author, used from a template as `{{ dependency_refs.SampleAPIApp.applicationId }}` (see below); its `AppName` value is the referenced application's folder name under `<root>/applications/` — the same folder [UC042](UC042_ViewApplicationDetails.md)'s form picks from a list of the project's existing applications, not free text, so a dependency can't point at an application that doesn't exist in the project. This only records the dependency and its sequencing implication; it does not itself resolve `applicationId` — that happens once deploy tooling exists (see Open questions), from the referenced application's own prior deploy result for the same environment.
+* `Dependencies` — a map of other application definitions this one depends on for deploy-time sequencing. Each entry's key (`SampleAPIApp` above) is a reference name chosen by the author, used from a template as `{{ dependency_refs.SampleAPIApp.applicationId }}` (see below); its `AppName` value is the referenced application's folder name under `<root>/Applications/` — the same folder [UC042](UC042_ViewApplicationDetails.md)'s form picks from a list of the project's existing applications, not free text, so a dependency can't point at an application that doesn't exist in the project. This only records the dependency and its sequencing implication; it does not itself resolve `applicationId` — that happens once deploy tooling exists (see Open questions), from the referenced application's own prior deploy result for the same environment.
 
 Rendering `Application.yaml.j2`, `FederatedCredentials.yaml.j2`, and `ServicePrincipal.yaml.j2` for one environment uses a Nunjucks context built from `Variables` merged with that environment's own entry — the environment's own fields win if a key appears in both — plus a `dependency_refs` object with one key per entry in `Dependencies`, each resolved (once deploy tooling exists) to that referenced application's own deploy result for the same environment. This happens once per entry in `Environments`, so one application definition with two environments listed renders (and, once deploy tooling exists, deploys) twice, independently, each render needing its dependencies deployed for that same environment first.
 
@@ -143,7 +143,7 @@ Note the `appId` field's value: a Service Principal is created *from* an Applica
 
 ## Postconditions
 
-* A folder under `<root>/applications/` containing the four files above constitutes a valid application definition, whether created by hand or (in a later phase) by tooling.
+* A folder under `<root>/Applications/` containing the four files above constitutes a valid application definition, whether created by hand or (in a later phase) by tooling.
 * No network call, authentication, or Graph interaction happens as a result of this use case alone — defining an application is entirely local.
 
 ## Related

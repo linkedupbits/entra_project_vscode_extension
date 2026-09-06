@@ -37,7 +37,7 @@ function stripGeneratedTags(tags: readonly string[], appName: string): string[] 
 /**
  * UC035 — captures a tenant application's live Application/FederatedCredentials/ServicePrincipal
  * details into the local application-definition folder UC040 already defines for `identity.appName`
- * (`<artifactsRoot>/applications/<appName>/`), rather than a flat downloaded-artifact snapshot
+ * (`<artifactsRoot>/Applications/<appName>/`), rather than a flat downloaded-artifact snapshot
  * (UC020/UC031) — there is no such snapshot concept for Applications yet, and this folder is the
  * one place this project already models "the local counterpart of a tenant application."
  *

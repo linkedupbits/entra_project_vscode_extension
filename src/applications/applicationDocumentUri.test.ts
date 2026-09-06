@@ -4,7 +4,7 @@ import { APPLICATION_DOCUMENT_SCHEME, toApplicationDocumentUri, fromApplicationD
 
 describe('toApplicationDocumentUri / fromApplicationDocumentUri', () => {
   it('round-trips a folder URI through the virtual document URI', () => {
-    const folderUri = vscode.Uri.parse('file:///repo/entra/applications/sample-web-app') as unknown as vscode.Uri;
+    const folderUri = vscode.Uri.parse('file:///repo/entra/Applications/sample-web-app') as unknown as vscode.Uri;
 
     const documentUri = toApplicationDocumentUri(folderUri);
     const recovered = fromApplicationDocumentUri(documentUri);
@@ -13,7 +13,7 @@ describe('toApplicationDocumentUri / fromApplicationDocumentUri', () => {
   });
 
   it('uses the entra-application scheme', () => {
-    const folderUri = vscode.Uri.parse('file:///repo/entra/applications/sample-web-app') as unknown as vscode.Uri;
+    const folderUri = vscode.Uri.parse('file:///repo/entra/Applications/sample-web-app') as unknown as vscode.Uri;
 
     const documentUri = toApplicationDocumentUri(folderUri);
 
@@ -22,7 +22,7 @@ describe('toApplicationDocumentUri / fromApplicationDocumentUri', () => {
   });
 
   it('gives the virtual document a .yaml path suffix, for syntax highlighting', () => {
-    const folderUri = vscode.Uri.parse('file:///repo/entra/applications/sample-web-app') as unknown as vscode.Uri;
+    const folderUri = vscode.Uri.parse('file:///repo/entra/Applications/sample-web-app') as unknown as vscode.Uri;
 
     const documentUri = toApplicationDocumentUri(folderUri);
 
@@ -30,7 +30,7 @@ describe('toApplicationDocumentUri / fromApplicationDocumentUri', () => {
   });
 
   it('round-trips correctly even when the folder path contains characters needing encoding', () => {
-    const folderUri = vscode.Uri.parse('file:///repo/entra/applications/sample app (dev)') as unknown as vscode.Uri;
+    const folderUri = vscode.Uri.parse('file:///repo/entra/Applications/sample app (dev)') as unknown as vscode.Uri;
 
     const documentUri = toApplicationDocumentUri(folderUri);
     const recovered = fromApplicationDocumentUri(documentUri);

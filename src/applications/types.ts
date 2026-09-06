@@ -47,7 +47,7 @@ export const ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS = {
 /**
  * One entry in `AppConfig.yaml`'s `Dependencies` map — a reference to another application
  * definition's folder (`AppName`, matching that application's folder name under
- * `<root>/applications/`, not a Graph ID) that this one depends on for deploy-time sequencing.
+ * `<root>/Applications/`, not a Graph ID) that this one depends on for deploy-time sequencing.
  * The map's own key (not stored on the entry itself) is the name a template refers to it by, e.g.
  * `{{ dependency_refs.SampleAPIApp.applicationId }}` in `Application.yaml.j2` — resolved once
  * deploy tooling exists, from that referenced application's own prior deploy result, the same way

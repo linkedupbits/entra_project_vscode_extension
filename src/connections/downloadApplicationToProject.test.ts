@@ -12,8 +12,8 @@ vi.mock('../workspacePaths', () => ({
 
 import { getApplicationsRootUri } from '../workspacePaths';
 
-const rootUri = { fsPath: '/repo/entra/applications', toString: () => '/repo/entra/applications' };
-const folderUri = { fsPath: '/repo/entra/applications/sample-web-app', toString: () => '/repo/entra/applications/sample-web-app' };
+const rootUri = { fsPath: '/repo/entra/Applications', toString: () => '/repo/entra/Applications' };
+const folderUri = { fsPath: '/repo/entra/Applications/sample-web-app', toString: () => '/repo/entra/Applications/sample-web-app' };
 
 const identity: TenantApplicationIdentity = { environment: 'dev', businessUnit: 'Customer Experience', appName: 'sample-web-app' };
 const connection: Connection = { name: 'Contoso', tenantId: 't-1', cloud: 'public' };
@@ -96,7 +96,7 @@ describe('downloadApplicationToProject', () => {
     expect(result.kind).toBe('ok');
     expect((result as { kind: 'ok'; folderUri: { fsPath: string } }).folderUri.fsPath).toBe(folderUri.fsPath);
     const [savedFolderUri, savedFiles] = save.mock.calls[0];
-    expect((savedFolderUri as { fsPath: string }).fsPath).toBe('/repo/entra/applications/sample-web-app');
+    expect((savedFolderUri as { fsPath: string }).fsPath).toBe('/repo/entra/Applications/sample-web-app');
     expect(savedFiles.appConfig.application_name).toBe('sample-web-app');
     expect(savedFiles.appConfig.business_unit).toBe('Customer Experience');
     expect(savedFiles.appConfig.Environments).toEqual([
