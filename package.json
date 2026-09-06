@@ -6,6 +6,10 @@
   "publisher": "entra-artifacts-project",
   "license": "MIT",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/linkedupbits/entra_project_vscode_extension.git"
+  },
   "engines": {
     "vscode": "^1.90.0"
   },
