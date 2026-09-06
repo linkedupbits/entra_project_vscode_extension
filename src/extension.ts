@@ -14,6 +14,10 @@ import { ApplicationEditorProvider } from './applications/applicationEditorProvi
 import { toApplicationEditorUri } from './applications/applicationEditorUri';
 import { ApplicationDocumentProvider } from './applications/applicationDocumentProvider';
 import { APPLICATION_DOCUMENT_SCHEME, toApplicationDocumentUri } from './applications/applicationDocumentUri';
+import { createApplication } from './applications/createApplication';
+import { promptForNewApplicationName } from './applications/promptForNewApplicationName';
+import { confirmDeleteApplication, deleteApplication } from './applications/deleteApplication';
+import { resolveApplicationArg } from './applications/resolveApplicationArg';
 import { EntraTreeProvider } from './tree/entraTreeProvider';
 import { AuthService } from './auth/authService';
 import { CredentialStore } from './auth/credentialStore';
@@ -124,6 +128,70 @@ export function activate(context: vscode.ExtensionContext): void {
         ApplicationEditorProvider.viewType
       );
     }),
+
+    // UC043 — create a new, empty application definition folder from the Applications node, then
+    // open it straight into UC042's structured editor.
+    vscode.commands.registerCommand('entra.newApplication', async () => {
+      const existingNames = await applicationsBranch.listApplicationNames();
+      const name = await promptForNewApplicationName(existingNames);
+      if (!name) {
+        return;
+      }
+      try {
+        const result = await createApplication(applicationStore, existingNames, name);
+        if (result.kind === 'ok') {
+          treeProvider.refresh();
+          void vscode.commands.executeCommand('entra.viewApplication', {
+            folderUri: result.folderUri,
+            name: result.name,
+          });
+        } else if (result.kind === 'noWorkspace') {
+          void vscode.window.showErrorMessage('Open a workspace folder before creating an application.');
+        } else if (result.kind === 'alreadyExists') {
+          void vscode.window.showErrorMessage(`An application named "${name}" already exists.`);
+        } else {
+          void vscode.window.showErrorMessage(`"${name}" is not a valid application name.`);
+        }
+      } catch (err) {
+        void vscode.window.showErrorMessage(
+          `Could not create "${name}": ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    }),
+
+    // UC043 — delete a project application's folder (to the OS trash), after a modal confirmation.
+    // Any open editor tab for that application is closed first, so a stale tab can't recreate the
+    // folder by saving.
+    vscode.commands.registerCommand(
+      'entra.deleteApplication',
+      async (item?: { folderUri?: vscode.Uri; name?: string }) => {
+        const target = await resolveApplicationArg(applicationsBranch, item, 'Select an application to delete');
+        if (!target || !(await confirmDeleteApplication(target.name))) {
+          return;
+        }
+        const openUris = new Set([
+          toApplicationEditorUri(target.folderUri).toString(),
+          toApplicationDocumentUri(target.folderUri).toString(),
+        ]);
+        for (const group of vscode.window.tabGroups?.all ?? []) {
+          for (const tab of group.tabs) {
+            const tabUri = (tab.input as { uri?: vscode.Uri } | undefined)?.uri;
+            if (tabUri && openUris.has(tabUri.toString())) {
+              void vscode.window.tabGroups.close(tab);
+            }
+          }
+        }
+        try {
+          await deleteApplication(target.folderUri);
+          treeProvider.refresh();
+          void vscode.window.showInformationMessage(`Deleted "${target.name}".`);
+        } catch (err) {
+          void vscode.window.showErrorMessage(
+            `Could not delete "${target.name}": ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+      }
+    ),
 
     // A second, text-based editing surface for a project application, alongside UC042's structured
     // webview — not a replacement for it. Opens the same four files, combined, as one normal,

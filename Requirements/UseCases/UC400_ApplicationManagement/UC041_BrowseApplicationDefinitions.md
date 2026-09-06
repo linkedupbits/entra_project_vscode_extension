@@ -2,7 +2,7 @@
 
 ## Overview
 
-This use case details how a user browses the application definitions already present in the local project structure (see [UC040 — Define an Application](UC040_DefineApplication.md)), under the **Applications** node of the Entra tree (see [UC029 — Navigate the Entra Tree](../UC300_ArtifactBrowsing/UC029_NavigateEntraTree.md)). It is the read/browse counterpart to UC040's format specification — this use case covers looking at what's there; the two ways to actually open an application's details are [UC042 — View Application Details](UC042_ViewApplicationDetails.md) (a structured Custom Editor tab) and opening it as a combined document (covered below). Neither this use case, UC042, nor the combined-document path covers creating, validating, rendering, or deploying an application definition, all of which remain UC040's explicitly deferred open questions.
+This use case details how a user browses the application definitions already present in the local project structure (see [UC040 — Define an Application](UC040_DefineApplication.md)), under the **Applications** node of the Entra tree (see [UC029 — Navigate the Entra Tree](../UC300_ArtifactBrowsing/UC029_NavigateEntraTree.md)). It is the read/browse counterpart to UC040's format specification — this use case covers looking at what's there; the two ways to actually open an application's details are [UC042 — View Application Details](UC042_ViewApplicationDetails.md) (a structured Custom Editor tab) and opening it as a combined document (covered below). Creating a new definition and deleting one are [UC043 — Create and Delete an Application Definition](UC043_CreateAndDeleteApplicationDefinition.md); validating, rendering, and deploying remain UC040's explicitly deferred open questions.
 
 Like [UC033 — View Local Project Artifacts](../UC300_ArtifactBrowsing/UC033_ViewLocalProjectArtifacts.md), this requires no connection, no authentication, and works fully offline — everything here is reading the local filesystem.
 
@@ -30,7 +30,7 @@ Like [UC033 — View Local Project Artifacts](../UC300_ArtifactBrowsing/UC033_Vi
 ### A1 — No applications defined yet
 
 1. `<artifactsRoot>/Applications/` doesn't exist, or exists but has no subfolders.
-2. The extension shows a single explanatory placeholder under **Applications** (e.g. "No applications defined yet") rather than leaving the node silently empty. The placeholder carries no action — there is no `entra.addApplication` command yet (see [UC040](UC040_DefineApplication.md)'s open questions).
+2. The extension shows a single explanatory placeholder under **Applications** (e.g. "No applications defined yet") rather than leaving the node silently empty. The placeholder itself carries no action — the **Applications** node's own **New Application** action ([UC043](UC043_CreateAndDeleteApplicationDefinition.md)) is how the first one gets created.
 
 ### A2 — Files added, removed, or edited externally
 
@@ -49,7 +49,8 @@ Like [UC033 — View Local Project Artifacts](../UC300_ArtifactBrowsing/UC033_Vi
 
 ## Related
 
-* [UC040 — Define an Application](UC040_DefineApplication.md) — defines the file format and folder structure this use case reads; also the source of the open questions this use case deliberately does not resolve (creation, validation, rendering, deployment).
+* [UC040 — Define an Application](UC040_DefineApplication.md) — defines the file format and folder structure this use case reads; also the source of the open questions this use case deliberately does not resolve (validation, rendering, deployment).
+* [UC043 — Create and Delete an Application Definition](UC043_CreateAndDeleteApplicationDefinition.md) — the **New Application** / **Delete Application** actions on the tree this use case browses.
 * [UC042 — View Application Details](UC042_ViewApplicationDetails.md) — what clicking an application node opens, and the source of the comment/unmodelled-field loss the combined document shares.
 * [UC029 — Navigate the Entra Tree](../UC300_ArtifactBrowsing/UC029_NavigateEntraTree.md) — the overall tree this is part of.
 * [UC033 — View Local Project Artifacts](../UC300_ArtifactBrowsing/UC033_ViewLocalProjectArtifacts.md) — the closest existing precedent (local, offline browsing of the project structure), diverging deliberately on file-watching (A2).

@@ -20,7 +20,7 @@ export class ApplicationsRootItem extends vscode.TreeItem {
 export class ApplicationItem extends vscode.TreeItem {
   constructor(
     public readonly folderUri: vscode.Uri,
-    name: string
+    public readonly name: string
   ) {
     super(name, vscode.TreeItemCollapsibleState.None);
     this.contextValue = 'application';

@@ -78,14 +78,17 @@ code as it's built:
   for actual behavior — UC035 in particular does **not** follow UC031's flat-snapshot shape, so
   don't assume it does just because the name suggests it's "the download use case."
 - `UseCases/UC400_ApplicationManagement/` — the on-disk structure for a locally-authored,
-  deployable "application definition" (UC040 — **format only, not implemented**: don't assume any
-  code creates a *new* application from scratch, renders its Nunjucks templates, or deploys it just
-  because the format is specified); browsing what's already defined (UC041 — **implemented**:
-  `applicationsBranch.ts`); and a structured, editable view of an *existing* application's four
-  files (UC042 — **implemented**: `applicationEditorProvider.ts`/`applicationEditorHtml.ts`/
-  `applicationFormLogic.ts`/`applicationStore.ts`; a second, plain-text combined-document editing
-  surface also exists via `applicationDocumentProvider.ts` — see the "Application definitions"
-  decision below for how the two relate).
+  deployable "application definition" (UC040 — **format spec; rendering the Nunjucks templates and
+  deploying are still not implemented** — don't assume either exists just because the format is
+  specified); browsing what's already defined (UC041 — **implemented**: `applicationsBranch.ts`); a
+  structured, editable view of an *existing* application's four files (UC042 — **implemented**:
+  `applicationEditorProvider.ts`/`applicationEditorHtml.ts`/`applicationFormLogic.ts`/
+  `applicationStore.ts`; a second, plain-text combined-document editing surface also exists via
+  `applicationDocumentProvider.ts` — see the "Application definitions" decision below for how the
+  two relate); and creating a new empty definition / deleting one from the tree (UC043 —
+  **implemented**: `createApplication.ts` / `promptForNewApplicationName.ts` /
+  `deleteApplication.ts` / `resolveApplicationArg.ts`, wired as `entra.newApplication` /
+  `entra.deleteApplication`).
 
 **Requirements are kept in sync with the implementation — this is a hard rule, not a nice-to-have.**
 Any change to behavior, the data model, validation, or the UI is done *together with* updating the
@@ -149,7 +152,22 @@ These came out of an explicit planning pass with the user and should not be sile
 - **Local file format**: one **YAML** file per downloaded artifact, close to the raw Graph schema,
   named `<displayName>__<id>.yaml`, plus a `_meta` block (`sourceConnection` name, tenant ID, Graph
   endpoint/API version, download timestamp). YAML specifically (not JSON) so files support comments.
-- **Application definitions (UC040 format; UC041 browsing; UC042 structured editing — all implemented except the format's actual deploy path)**: a
+- **Create / delete a project application (UC043)**: `entra.newApplication` (inline `+` on the
+  Applications node, plus its context menu / palette) prompts for a name
+  (`promptForNewApplicationName.ts` — validates non-blank, no `/`/`\`, not `.`/`..`, not a
+  duplicate) then `createApplication.ts` writes the four files at their empty defaults via
+  `ApplicationStore.save()` (so they get the same generated blocks a UC042 Save produces —
+  `AppConfig.yaml` carries only `application_name`), and opens the new folder straight into UC042's
+  editor. `entra.deleteApplication` (context menu on an application node, or palette →
+  `resolveApplicationArg.ts` quick-pick) shows a **modal** confirm (`deleteApplication.ts`'s
+  `confirmDeleteApplication`), closes any open editor tab for that folder (so a stale tab can't
+  recreate it on save — matched via `toApplicationEditorUri`/`toApplicationDocumentUri` against
+  `vscode.window.tabGroups`), then `vscode.workspace.fs.delete(folder, { recursive: true })` — trying
+  `useTrash: true` first (recoverable) and, if the provider can't (`provider does not support it` —
+  dev containers, some remotes), retrying with `useTrash: false`. `ApplicationItem` gained a public
+  `name` field for these commands. `extension.ts` is coverage-exempt so all real logic lives in
+  those four small, unit-tested helpers.
+- **Application definitions (UC040 format; UC041 browsing; UC042 structured editing; UC043 create/delete — all implemented except the format's actual deploy path)**: a
   locally-authored, deployable unit distinct from the downloaded-artifact snapshot above — a folder under
   `<root>/Applications/<name>/` of four files. `AppConfig.yaml` isn't templated itself but is where
   the other three files' Nunjucks placeholders get their values from: application-wide metadata, a

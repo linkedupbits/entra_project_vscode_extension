@@ -75,6 +75,18 @@
         "command": "entra.openApplicationDocument",
         "title": "Open as Document",
         "category": "Entra"
+      },
+      {
+        "command": "entra.newApplication",
+        "title": "New Application",
+        "category": "Entra",
+        "icon": "$(add)"
+      },
+      {
+        "command": "entra.deleteApplication",
+        "title": "Delete Application",
+        "category": "Entra",
+        "icon": "$(trash)"
       }
     ],
     "menus": {
@@ -112,9 +124,24 @@
           "group": "1_modification"
         },
         {
+          "command": "entra.newApplication",
+          "when": "view == entraTree && viewItem == applicationsRoot",
+          "group": "inline"
+        },
+        {
+          "command": "entra.newApplication",
+          "when": "view == entraTree && viewItem == applicationsRoot",
+          "group": "1_modification"
+        },
+        {
           "command": "entra.openApplicationDocument",
           "when": "view == entraTree && viewItem == application",
           "group": "1_modification"
+        },
+        {
+          "command": "entra.deleteApplication",
+          "when": "view == entraTree && viewItem == application",
+          "group": "9_delete"
         }
       ]
     },

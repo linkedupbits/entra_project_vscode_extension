@@ -146,6 +146,7 @@ export const window = {
   createWebviewPanel: vi.fn(),
   showInformationMessage: vi.fn(),
   showErrorMessage: vi.fn(),
+  showWarningMessage: vi.fn(),
   showQuickPick: vi.fn(),
   showInputBox: vi.fn(),
   showTextDocument: vi.fn(),
@@ -177,6 +178,7 @@ export function resetVscodeMock(): void {
   window.createWebviewPanel.mockReset();
   window.showInformationMessage.mockReset();
   window.showErrorMessage.mockReset();
+  window.showWarningMessage.mockReset();
   window.showQuickPick.mockReset();
   window.showInputBox.mockReset();
   window.showTextDocument.mockReset();
