@@ -325,7 +325,22 @@ These came out of an explicit planning pass with the user and should not be sile
   live count), and each environment inside it is *itself* a collapsible `<details>` card with
   labelled fields — the same treatment (and shared CSS/`refresh*Summaries()` machinery, plus the
   same `.environment-card` addition to `onRemoveClick`'s `closest()` selector) as the Exposed API
-  scopes / Federated Credentials cards. Every one of these collapsible summaries draws its own
+  scopes / Federated Credentials cards. **Every** top-level section is now wrapped in that same
+  `<details class="section-card">` box, collapsed by default: Default variables (title changed from
+  "Variables"; `variablesSection`), Environments (`environmentsSection`), Dependencies
+  (`dependenciesSection`), Application/App Registration (`applicationSection`), Required permissions
+  (`permissionsSection`), Exposed API scopes (`oauth2ScopesSection`), Federated Credentials
+  (`fedcredSection`), Service Principal (`servicePrincipalSection`). `permissionsSection` and
+  `oauth2ScopesSection` are **nested inside** `applicationSection` (all three come from
+  `Application.yaml.j2`). The row-listing ones carry a live `(N)` count kept current by
+  `refreshSectionCounts()` in `notifyEdit()` (`.variable-row` — top-level only, per-env rows are
+  `.env-var-row` — `.dependency-row` / `.permission-row` / `.oauth2-scope-card` / `.fedcred-card`);
+  Application and Service Principal are mostly fixed fields and have no count. Since a validation
+  error inside a collapsed box would be invisible, the webview's message handler, after applying
+  whichever error, walks up from the first `.error.visible` opening **every** ancestor `<details>`
+  (not just the nearest — nesting) and scrolls it into view. This matches UC034's preview, which
+  collapses Required permissions / Dependencies / Exposed API scopes the same way (via
+  `applicationPreviewHtml.ts`'s `collapsibleSection()`). Every one of these collapsible summaries draws its own
   `::before` disclosure chevron (rotated under `details[open]`) because the native `<summary>`
   marker disappears the moment a summary is `display: flex` — a real gotcha, don't remove those
   rules thinking the browser will fall back to the default triangle. Each environment card carries a **Variables owned by this
@@ -485,7 +500,10 @@ These came out of an explicit planning pass with the user and should not be sile
   of the three calls) aborts the whole preview. `connections/applicationPreviewHtml.ts`'s
   `buildApplicationPreviewHtml()` (a pure function, genuinely unit-tested — not glue) renders a
   **Unique name** line (see below) plus the three sections read-only (labels/lists, no inputs),
-  including a **Dependencies** list under the Application section (UC035 A6 — see below).
+  including a **Dependencies** list under the Application section (UC035 A6 — see below). Within the
+  Application section, Required permissions / Dependencies / Exposed API scopes are each a
+  `collapsibleSection()` — a native `<details class="section">` starting collapsed (no `open`); the
+  shell's CSS styles the `<summary>`, no script.
   `webview/artifactViewerPanel.ts`'s `ArtifactViewerPanel` is a reusable **shell**
   (title/badge/hint/Download-button chrome plus shared CSS) that takes arbitrary caller-built
   `bodyHtml` — it no longer assumes YAML-in-a-`<pre>`, so a future artifact type can supply its own

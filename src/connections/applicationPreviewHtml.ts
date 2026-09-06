@@ -125,6 +125,16 @@ function errorBlock(message: string): string {
 }
 
 /**
+ * A section that starts collapsed — used for the three longest, most detail-heavy parts of the
+ * Application section (Required permissions, Dependencies, Exposed API scopes), so the preview
+ * opens showing the identity/redirect-URI summary and the reader expands the noisy lists only when
+ * they want them. Native `<details>` — no script needed; the shell's CSS styles the `<summary>`.
+ */
+function collapsibleSection(title: string, bodyHtml: string): string {
+  return `<details class="section"><summary>${escapeHtml(title)}</summary>${bodyHtml}</details>`;
+}
+
+/**
  * The `AppName:<Environment>_<BusinessUnit>_<AppName>` tag (see tenantApplicationIdentity.ts),
  * shown prominently since it's the one identifier guaranteed unique across applications that
  * happen to share a Graph `displayName` — Graph itself doesn't enforce displayName uniqueness.
@@ -164,12 +174,18 @@ export function buildApplicationPreviewHtml(data: ApplicationPreviewData): strin
     ${listOrNone(data.publicClientRedirectUris)}
     <h3>SPA redirect URIs</h3>
     ${listOrNone(data.spaRedirectUris)}
-    <h3>Required permissions</h3>
-    ${permissionsListOrNone(data.application.value.requiredPermissions, data.resourceApplications)}
-    <h3>Dependencies</h3>
-    ${dependenciesListOrNone(data.application.value.requiredPermissions, data.resourceApplications)}
-    <h3>Exposed API scopes</h3>
-    ${oauth2PermissionScopesListOrNone(data.application.value.oauth2PermissionScopes)}`;
+    ${collapsibleSection(
+      'Required permissions',
+      permissionsListOrNone(data.application.value.requiredPermissions, data.resourceApplications)
+    )}
+    ${collapsibleSection(
+      'Dependencies',
+      dependenciesListOrNone(data.application.value.requiredPermissions, data.resourceApplications)
+    )}
+    ${collapsibleSection(
+      'Exposed API scopes',
+      oauth2PermissionScopesListOrNone(data.application.value.oauth2PermissionScopes)
+    )}`;
 
   const federatedCredentialsSection =
     data.federatedCredentials.kind === 'error'

@@ -260,6 +260,40 @@ describe('getHtml — generated webview script', () => {
     expect(html).toContain('dev-deploy — repo:contoso/sample:environment:dev');
   });
 
+  it('wraps every top-level section in a collapsible box, collapsed by default, with live counts where it lists rows', () => {
+    const html = getHtml('sample', populatedFiles, ['other-app'], permissionOptions);
+    for (const id of [
+      'variablesSection',
+      'environmentsSection',
+      'dependenciesSection',
+      'applicationSection',
+      'permissionsSection',
+      'oauth2ScopesSection',
+      'fedcredSection',
+      'servicePrincipalSection',
+    ]) {
+      expect(html).toContain(`<details class="section-card" id="${id}">`);
+      expect(html).not.toContain(`id="${id}" open`);
+    }
+    expect(html).toContain('<span>Default variables</span>');
+    expect(html).toContain('<span>Application (App Registration)</span>');
+    expect(html).toContain('<span>Federated Credentials</span>');
+    expect(html).toContain('<span>Service Principal</span>');
+    // counts seeded from the populated files
+    expect(html).toContain('id="variableCount">(1)</span>');
+    expect(html).toContain('id="dependencyCount">(1)</span>');
+    expect(html).toContain('id="permissionCount">(2)</span>');
+    expect(html).toContain('id="oauth2ScopeCount">(1)</span>');
+    expect(html).toContain('id="fedcredCount">(1)</span>');
+    // the old plain headings are gone
+    expect(html).not.toContain('<h2>Variables</h2>');
+    expect(html).not.toContain('<h2>Dependencies</h2>');
+    expect(html).not.toContain('<h2>Federated Credentials</h2>');
+    expect(html).not.toContain('<h2>Service Principal</h2>');
+    expect(html).not.toContain('<h2>Application (App Registration)</h2>');
+    expect(html).not.toContain('<h3>Required permissions</h3>');
+  });
+
   it('wraps Environments in a collapsible section (collapsed by default) and each environment in a collapsible card', () => {
     const html = getHtml('sample', populatedFiles, ['other-app'], permissionOptions);
     expect(html).toContain('<details class="section-card" id="environmentsSection">');

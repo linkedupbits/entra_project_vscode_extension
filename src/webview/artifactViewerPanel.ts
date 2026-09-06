@@ -117,6 +117,17 @@ function getHtml(title: string, sourceBadge: string, bodyHtml: string, showDownl
   h1 { font-size: 1.3em; font-weight: 600; margin: 0 0 8px; }
   h2 { font-size: 1.05em; font-weight: 600; margin: 24px 0 8px; }
   h3 { font-size: 0.95em; font-weight: 600; margin: 16px 0 4px; color: var(--vscode-descriptionForeground); }
+  details.section { margin: 12px 0 4px; }
+  details.section > summary {
+    font-size: 0.95em;
+    font-weight: 600;
+    color: var(--vscode-descriptionForeground);
+    cursor: pointer;
+    user-select: none;
+    padding: 2px 0;
+  }
+  details.section > summary:hover { color: var(--vscode-foreground); }
+  details.section[open] > summary { margin-bottom: 4px; }
   .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .badge {
     display: inline-block;

@@ -172,9 +172,9 @@ describe('buildApplicationPreviewHtml', () => {
         },
       })
     );
-    expect(html).toContain('<h3>Dependencies</h3>');
+    expect(html).toContain('<summary>Dependencies</summary>');
     expect(html).toContain('Sample API App (<code>api-app-id</code>)');
-    expect(html).not.toMatch(/Dependencies<\/h3>\s*<ul>[^<]*Microsoft Graph/);
+    expect(html).not.toMatch(/Dependencies<\/summary>\s*<ul>[^<]*Microsoft Graph/);
   });
 
   it('flags a non-Graph dependency whose resource has no service principal in the tenant', () => {
@@ -210,7 +210,16 @@ describe('buildApplicationPreviewHtml', () => {
         },
       })
     );
-    expect(html).toMatch(/<h3>Dependencies<\/h3>\s*<div class="empty">None<\/div>/);
+    expect(html).toMatch(/<summary>Dependencies<\/summary>\s*<div class="empty">None<\/div>/);
+  });
+
+  it('renders Required permissions, Dependencies and Exposed API scopes as collapsed <details> sections', () => {
+    const html = buildApplicationPreviewHtml(data());
+    for (const title of ['Required permissions', 'Dependencies', 'Exposed API scopes']) {
+      expect(html).toContain(`<details class="section"><summary>${title}</summary>`);
+    }
+    // collapsed by default — no `open` attribute on any section
+    expect(html).not.toMatch(/<details class="section" open|<details open class="section"/);
   });
 
   it('renders an exposed API scope with its value, type, and enabled status', () => {

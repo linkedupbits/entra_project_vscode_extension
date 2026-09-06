@@ -628,11 +628,15 @@ export function getHtml(
     <label for="businessUnit">Business unit</label>
     <input type="text" id="businessUnit" value="${escapeHtml(appConfig.business_unit)}" />
 
-    <h2>Variables</h2>
-    <div class="hint">Default values shared across every environment below.</div>
-    <div id="variableRows">${variableRowsHtml(appConfig)}</div>
-    <button type="button" class="add-row-btn" id="addVariableBtn">+ Add variable</button>
-    <div class="error" id="variablesError"></div>
+    <details class="section-card" id="variablesSection">
+      <summary class="section-summary"><span>Default variables</span><span class="section-count" id="variableCount">(${Object.keys(appConfig.Variables).length})</span></summary>
+      <div class="section-body">
+        <div class="hint">Default values shared across every environment below.</div>
+        <div id="variableRows">${variableRowsHtml(appConfig)}</div>
+        <button type="button" class="add-row-btn" id="addVariableBtn">+ Add variable</button>
+        <div class="error" id="variablesError"></div>
+      </div>
+    </details>
 
     <details class="section-card" id="environmentsSection">
       <summary class="section-summary"><span>Environments</span><span class="section-count" id="environmentCount">(${appConfig.Environments.length})</span></summary>
@@ -644,68 +648,92 @@ export function getHtml(
       </div>
     </details>
 
-    <h2>Dependencies</h2>
-    <div class="hint">Other applications this one depends on for deploy sequencing. Reference one in a template as <code>{{ dependency_refs.&lt;Key&gt;.applicationId }}</code>, resolved once the referenced application has been deployed.</div>
-    <div id="dependencyRows">${dependencyRowsHtml(appConfig, dependencyAppOptions)}</div>
-    <button type="button" class="add-row-btn" id="addDependencyBtn">+ Add dependency</button>
-    <div class="error" id="dependenciesError"></div>
+    <details class="section-card" id="dependenciesSection">
+      <summary class="section-summary"><span>Dependencies</span><span class="section-count" id="dependencyCount">(${Object.keys(appConfig.Dependencies).length})</span></summary>
+      <div class="section-body">
+        <div class="hint">Other applications this one depends on for deploy sequencing. Reference one in a template as <code>{{ dependency_refs.&lt;Key&gt;.applicationId }}</code>, resolved once the referenced application has been deployed.</div>
+        <div id="dependencyRows">${dependencyRowsHtml(appConfig, dependencyAppOptions)}</div>
+        <button type="button" class="add-row-btn" id="addDependencyBtn">+ Add dependency</button>
+        <div class="error" id="dependenciesError"></div>
+      </div>
+    </details>
 
     <hr />
 
-    <h2>Application (App Registration)</h2>
-    <div class="hint">Application.yaml.j2 — mirrors the Graph JSON body for creating/updating the App Registration.</div>
+    <details class="section-card" id="applicationSection">
+      <summary class="section-summary"><span>Application (App Registration)</span></summary>
+      <div class="section-body">
+        <div class="hint">Application.yaml.j2 — mirrors the Graph JSON body for creating/updating the App Registration.</div>
 
-    <label for="displayName">Display name</label>
-    <input type="text" id="displayName" value="${escapeHtml(application.displayName)}" />
+        <label for="displayName">Display name</label>
+        <input type="text" id="displayName" value="${escapeHtml(application.displayName)}" />
 
-    <label for="signInAudience">Sign-in audience</label>
-    <select id="signInAudience">
-      <option value="AzureADMyOrg" ${selectedAttr(application.signInAudience, 'AzureADMyOrg')}>My organization only (AzureADMyOrg)</option>
-      <option value="AzureADMultipleOrgs" ${selectedAttr(application.signInAudience, 'AzureADMultipleOrgs')}>Any organization (AzureADMultipleOrgs)</option>
-      <option value="AzureADandPersonalMicrosoftAccount" ${selectedAttr(application.signInAudience, 'AzureADandPersonalMicrosoftAccount')}>Any organization and personal Microsoft accounts</option>
-      <option value="PersonalMicrosoftAccount" ${selectedAttr(application.signInAudience, 'PersonalMicrosoftAccount')}>Personal Microsoft accounts only</option>
-    </select>
+        <label for="signInAudience">Sign-in audience</label>
+        <select id="signInAudience">
+          <option value="AzureADMyOrg" ${selectedAttr(application.signInAudience, 'AzureADMyOrg')}>My organization only (AzureADMyOrg)</option>
+          <option value="AzureADMultipleOrgs" ${selectedAttr(application.signInAudience, 'AzureADMultipleOrgs')}>Any organization (AzureADMultipleOrgs)</option>
+          <option value="AzureADandPersonalMicrosoftAccount" ${selectedAttr(application.signInAudience, 'AzureADandPersonalMicrosoftAccount')}>Any organization and personal Microsoft accounts</option>
+          <option value="PersonalMicrosoftAccount" ${selectedAttr(application.signInAudience, 'PersonalMicrosoftAccount')}>Personal Microsoft accounts only</option>
+        </select>
 
-    <div class="hint">Redirect URIs are defined per environment (in the Environments section above), not here — they can differ per deployment target.</div>
+        <div class="hint">Redirect URIs are defined per environment (in the Environments section above), not here — they can differ per deployment target.</div>
 
-    <h3>Required permissions</h3>
-    <div class="hint">One row per permission — rows sharing a Resource App ID are grouped together when saved. Resource App ID is either Microsoft Graph or one of this application's Dependencies (added above); a value that's neither (e.g. from a hand-edited file, or referencing a dependency since renamed or removed) is shown as plain text with a ⚠ warning instead.</div>
-    <div id="permissionRows">${requiredPermissionRowsHtml(application.requiredPermissions, Object.keys(appConfig.Dependencies), permissionOptionsByResourceAppId)}</div>
-    <button type="button" class="add-row-btn" id="addPermissionBtn">+ Add permission</button>
+    <details class="section-card" id="permissionsSection">
+      <summary class="section-summary"><span>Required permissions</span><span class="section-count" id="permissionCount">(${application.requiredPermissions.length})</span></summary>
+      <div class="section-body">
+        <div class="hint">One row per permission — rows sharing a Resource App ID are grouped together when saved. Resource App ID is either Microsoft Graph or one of this application's Dependencies (added above); a value that's neither (e.g. from a hand-edited file, or referencing a dependency since renamed or removed) is shown as plain text with a ⚠ warning instead.</div>
+        <div id="permissionRows">${requiredPermissionRowsHtml(application.requiredPermissions, Object.keys(appConfig.Dependencies), permissionOptionsByResourceAppId)}</div>
+        <button type="button" class="add-row-btn" id="addPermissionBtn">+ Add permission</button>
+      </div>
+    </details>
 
-    <h3>Exposed API scopes (oauth2PermissionScopes)</h3>
-    <div class="hint">Delegated permission scopes this application exposes for other applications to request — Graph's <code>api.oauth2PermissionScopes</code>. Each scope's ID is generated automatically and kept stable across saves, so a previously deployed scope is updated in place rather than replaced — or give it an <strong>ID variable name</strong> to write the ID as <code>{{ environment.Variables.&lt;name&gt; }}</code> instead, resolved per environment once deploy tooling exists.</div>
-    <div id="oauth2ScopeRows">${oauth2PermissionScopeRowsHtml(application.oauth2PermissionScopes)}</div>
-    <button type="button" class="add-row-btn" id="addOauth2ScopeBtn">+ Add scope</button>
+    <details class="section-card" id="oauth2ScopesSection">
+      <summary class="section-summary"><span>Exposed API scopes (oauth2PermissionScopes)</span><span class="section-count" id="oauth2ScopeCount">(${application.oauth2PermissionScopes.length})</span></summary>
+      <div class="section-body">
+        <div class="hint">Delegated permission scopes this application exposes for other applications to request — Graph's <code>api.oauth2PermissionScopes</code>. Each scope's ID is generated automatically and kept stable across saves, so a previously deployed scope is updated in place rather than replaced — or give it an <strong>ID variable name</strong> to write the ID as <code>{{ environment.Variables.&lt;name&gt; }}</code> instead, resolved per environment once deploy tooling exists.</div>
+        <div id="oauth2ScopeRows">${oauth2PermissionScopeRowsHtml(application.oauth2PermissionScopes)}</div>
+        <button type="button" class="add-row-btn" id="addOauth2ScopeBtn">+ Add scope</button>
+      </div>
+    </details>
+      </div>
+    </details>
 
-    <h2>Federated Credentials</h2>
-    <div class="hint">FederatedCredentials.yaml.j2 — one row per credential.</div>
-    <div id="fedcredRows">${federatedCredentialRowsHtml(federatedCredentials)}</div>
-    <button type="button" class="add-row-btn" id="addFedCredBtn">+ Add federated credential</button>
+    <details class="section-card" id="fedcredSection">
+      <summary class="section-summary"><span>Federated Credentials</span><span class="section-count" id="fedcredCount">(${federatedCredentials.length})</span></summary>
+      <div class="section-body">
+        <div class="hint">FederatedCredentials.yaml.j2 — one row per credential.</div>
+        <div id="fedcredRows">${federatedCredentialRowsHtml(federatedCredentials)}</div>
+        <button type="button" class="add-row-btn" id="addFedCredBtn">+ Add federated credential</button>
+      </div>
+    </details>
 
-    <h2>Service Principal</h2>
-    <div class="hint">ServicePrincipal.yaml.j2 — mirrors the Graph JSON body for the Enterprise Application.</div>
+    <details class="section-card" id="servicePrincipalSection">
+      <summary class="section-summary"><span>Service Principal</span></summary>
+      <div class="section-body">
+        <div class="hint">ServicePrincipal.yaml.j2 — mirrors the Graph JSON body for the Enterprise Application.</div>
 
-    <label for="appId">Application (client) ID</label>
-    <input type="text" id="appId" value="${escapeHtml(servicePrincipal.appId)}" />
+        <label for="appId">Application (client) ID</label>
+        <input type="text" id="appId" value="${escapeHtml(servicePrincipal.appId)}" />
 
-    <label class="checkbox-label">
-      <input type="checkbox" id="appRoleAssignmentRequired" ${servicePrincipal.appRoleAssignmentRequired ? 'checked' : ''} />
-      Require app role assignment before users can sign in
-    </label>
+        <label class="checkbox-label">
+          <input type="checkbox" id="appRoleAssignmentRequired" ${servicePrincipal.appRoleAssignmentRequired ? 'checked' : ''} />
+          Require app role assignment before users can sign in
+        </label>
 
-    <h3>Tags</h3>
-    <div class="hint">Generated automatically at deploy time from the Application name and Business unit above (see UC042) — read-only preview, not saved by this form.</div>
-    <div class="generated-tags" id="generatedTags">
-      <span class="generated-tag" id="generatedTagAppName"></span>
-      <span class="generated-tag" id="generatedTagEnvironment"></span>
-      <span class="generated-tag" id="generatedTagName"></span>
-      <span class="generated-tag" id="generatedTagBusinessUnit"></span>
-    </div>
-    <div class="hint">Additional custom tags:</div>
-    <div id="tagRows">${stringListRowsHtml(servicePrincipal.tags, 'tag', 'Tag')}</div>
-    <button type="button" class="add-row-btn" id="addTagBtn">+ Add tag</button>
-    <div class="error" id="tagsError"></div>
+        <h3>Tags</h3>
+        <div class="hint">Generated automatically at deploy time from the Application name and Business unit above (see UC042) — read-only preview, not saved by this form.</div>
+        <div class="generated-tags" id="generatedTags">
+          <span class="generated-tag" id="generatedTagAppName"></span>
+          <span class="generated-tag" id="generatedTagEnvironment"></span>
+          <span class="generated-tag" id="generatedTagName"></span>
+          <span class="generated-tag" id="generatedTagBusinessUnit"></span>
+        </div>
+        <div class="hint">Additional custom tags:</div>
+        <div id="tagRows">${stringListRowsHtml(servicePrincipal.tags, 'tag', 'Tag')}</div>
+        <button type="button" class="add-row-btn" id="addTagBtn">+ Add tag</button>
+        <div class="error" id="tagsError"></div>
+      </div>
+    </details>
 
     <div class="error" id="generalError"></div>
 
@@ -983,6 +1011,27 @@ export function getHtml(
       if (count) {
         count.textContent = '(' + cards.length + ')';
       }
+    }
+
+    // Keeps the collapsed sections' "(N)" counts (Default variables / Dependencies / Required
+    // permissions / Exposed API scopes / Federated Credentials) in sync with how many rows each
+    // currently holds, so the collapsed sections stay informative. Called from notifyEdit(), which
+    // fires on every add/remove/edit. The ".variable-row" selector is the top-level shared list
+    // only (per-environment variable rows use a different class, ".env-var-row").
+    function refreshSectionCounts() {
+      var pairs = [
+        ['variableCount', '.variable-row'],
+        ['dependencyCount', '.dependency-row'],
+        ['permissionCount', '.permission-row'],
+        ['oauth2ScopeCount', '.oauth2-scope-card'],
+        ['fedcredCount', '.fedcred-card'],
+      ];
+      pairs.forEach(function (pair) {
+        var el = document.getElementById(pair[0]);
+        if (el) {
+          el.textContent = '(' + document.querySelectorAll(pair[1]).length + ')';
+        }
+      });
     }
 
     // Mirrors applicationEditorHtml.ts's permissionIdFieldHtml() — duplicated here for the same
@@ -1287,6 +1336,7 @@ export function getHtml(
       refreshEnvironmentSummaries();
       refreshOauth2ScopeSummaries();
       refreshFedCredSummaries();
+      refreshSectionCounts();
       vscode.postMessage({ type: 'edit', input: buildInputSnapshot() });
     }
     // A Permission ID's options depend on its row's Resource App ID, and picking a known Permission
@@ -1355,6 +1405,23 @@ export function getHtml(
       } else if (message.type === 'error') {
         generalError.textContent = message.message;
         generalError.classList.add('visible');
+      }
+      // A validation error inside a collapsed section would otherwise be invisible — expand the
+      // section holding whichever error just became visible, and bring it into view.
+      var shownError = form.querySelector('.error.visible');
+      if (shownError) {
+        // Open every ancestor <details> (sections can nest — Required permissions / Exposed API
+        // scopes live inside the collapsible Application section), not just the nearest one.
+        var node = shownError.parentElement;
+        while (node) {
+          if (node.tagName === 'DETAILS') {
+            node.open = true;
+          }
+          node = node.parentElement;
+        }
+        if (shownError.scrollIntoView) {
+          shownError.scrollIntoView({ block: 'nearest' });
+        }
       }
     });
   })();

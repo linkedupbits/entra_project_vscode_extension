@@ -65,7 +65,10 @@ environments, or dependencies to show).
    section shows its fields as plain read-only text/lists (not inputs), including an explicit
    "None" for an empty list (each of the three redirect-URI categories, no required permissions, no
    federated credentials, no tags) — never a silently blank section indistinguishable from one that
-   failed to load.
+   failed to load. Within the Application section, **Required permissions**, **Dependencies**, and
+   **Exposed API scopes** are each a collapsible sub-section that starts **collapsed** — the
+   identity fields and redirect-URI lists are visible on open, and the reader expands the longer,
+   detail-heavy lists only when wanted. Their "None" states still apply once expanded.
    * **Unique name** is the `AppName:<Environment>_<BusinessUnit>_<AppName>` tag on the Service
      Principal (see UC042's Generated tags preview), shown as `<Environment>_<BusinessUnit>_<AppName>`
      — the one identifier guaranteed unique across applications that happen to share a Graph
