@@ -19,8 +19,16 @@ export interface ApplicationDependencyDerivation {
   dependencies: Record<string, DependencyEntry>;
   /** Just the dependencies newly derived on this pass (an entry already present under a matching key is not repeated), in first-seen order. */
   derived: DerivedDependency[];
-  /** Raw non-Graph `resourceAppId` → the `{{ dependency_refs.<key>.applicationId }}` reference it should be rewritten to. */
-  resourceAppIdRewrites: Record<string, string>;
+  /**
+   * The input `requiredPermissions` with every non-Graph row rewritten for a local application
+   * definition: its `resourceAppId` becomes `{{ dependency_refs.<key>.applicationId }}`, and its
+   * `id` becomes the resolved permission's **value** (its name, e.g. `access_as_user`) instead of
+   * the tenant GUID — a dependency's scope GUID isn't fixed at authoring time, so UC042's
+   * Permission Editor keys a dependency scope by its `value`, not its id (see `permissionIdOptions.ts`).
+   * Rows whose `id` couldn't be resolved keep their original value; Microsoft Graph rows are
+   * returned unchanged.
+   */
+  requiredPermissions: RequiredPermission[];
 }
 
 /** "Sample API App" → "SampleAPIApp" — a safe `Dependencies` map key / folder-name guess (see UC040's own example). */
@@ -51,7 +59,7 @@ export function deriveApplicationDependencies(
 ): ApplicationDependencyDerivation {
   const dependencies: Record<string, DependencyEntry> = { ...existingDependencies };
   const derived: DerivedDependency[] = [];
-  const resourceAppIdRewrites: Record<string, string> = {};
+  const resourceAppIdRewrites = new Map<string, string>();
 
   const distinctResourceAppIds = [
     ...new Set(
@@ -66,7 +74,7 @@ export function deriveApplicationDependencies(
 
     const existingKey = Object.keys(dependencies).find((k) => dependencies[k].AppName === appName);
     if (existingKey) {
-      resourceAppIdRewrites[resourceAppId] = buildDependencyReference(existingKey);
+      resourceAppIdRewrites.set(resourceAppId, buildDependencyReference(existingKey));
       continue;
     }
 
@@ -74,8 +82,21 @@ export function deriveApplicationDependencies(
     const key = preferred in dependencies ? resourceAppId : preferred;
     dependencies[key] = { AppName: appName };
     derived.push({ key, appName, resourceAppId, resolved });
-    resourceAppIdRewrites[resourceAppId] = buildDependencyReference(key);
+    resourceAppIdRewrites.set(resourceAppId, buildDependencyReference(key));
   }
 
-  return { dependencies, derived, resourceAppIdRewrites };
+  const rewrittenPermissions = requiredPermissions.map((permission) => {
+    const reference = resourceAppIdRewrites.get(permission.resourceAppId);
+    if (!reference) {
+      return { ...permission };
+    }
+    const scopeValue = resourceApplications[permission.resourceAppId]?.permissions[permission.id]?.name ?? '';
+    return {
+      ...permission,
+      resourceAppId: reference,
+      id: scopeValue.length > 0 ? scopeValue : permission.id,
+    };
+  });
+
+  return { dependencies, derived, requiredPermissions: rewrittenPermissions };
 }

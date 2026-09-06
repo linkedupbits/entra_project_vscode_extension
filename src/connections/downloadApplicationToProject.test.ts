@@ -138,7 +138,7 @@ describe('downloadApplicationToProject', () => {
     expect(savedFiles.application).toEqual((data.application as { kind: 'ok'; value: ApplicationFiles['application'] }).value);
   });
 
-  it('derives AppConfig Dependencies from non-Graph required permissions and rewrites their resourceAppId', async () => {
+  it('derives AppConfig Dependencies from non-Graph required permissions, rewriting resourceAppId and the GUID to the scope value', async () => {
     vi.mocked(getApplicationsRootUri).mockReturnValue(rootUri as never);
     const { store, save } = fakeStore();
     const data = okData({
@@ -149,13 +149,16 @@ describe('downloadApplicationToProject', () => {
           signInAudience: 'AzureADMyOrg',
           requiredPermissions: [
             { resourceAppId: '00000003-0000-0000-c000-000000000000', id: 'graph-perm', type: 'Role' },
-            { resourceAppId: 'api-app-id', id: 'access_as_user', type: 'Scope' },
+            { resourceAppId: 'api-app-id', id: 'a1b2c3-scope-guid', type: 'Scope' },
           ],
           oauth2PermissionScopes: [],
         },
       },
       resourceApplications: {
-        'api-app-id': { displayName: 'Sample API App', permissions: {} },
+        'api-app-id': {
+          displayName: 'Sample API App',
+          permissions: { 'a1b2c3-scope-guid': { name: 'access_as_user', type: 'Scope' } },
+        },
       },
     });
 

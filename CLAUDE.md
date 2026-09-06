@@ -546,14 +546,19 @@ These came out of an explicit planning pass with the user and should not be sile
     `deriveApplicationDependencies(requiredPermissions, resourceApplications, existingDependencies)`
     (pure, unit-tested) walks every distinct non-Microsoft-Graph `resourceAppId`
     (`resourceAppId !== MICROSOFT_GRAPH_APP_ID`, from `resourceAppIdReference.ts`) and produces an
-    `AppConfig.yaml` `Dependencies` entry for it plus a `resourceAppId → {{ dependency_refs.<key>.applicationId }}`
-    rewrite. Key = the resource's resolved `displayName` squashed to `[A-Za-z0-9]` (matching UC040's
-    own `SampleAPIApp` example), or the raw `appId` when unresolved (no SP in tenant — user's
-    explicit choice) or when that key already belongs to a different `AppName`. Existing
-    `Dependencies` are merged, never overwritten; an entry already pointing at the same `AppName` is
-    reused for the rewrite. `downloadApplicationToProject()` runs this **only when writing a fresh
-    `Application.yaml.j2`** (`!existingTemplates.application`) — it then sets `appConfig.Dependencies`
-    to the merged map and rewrites the written file's `requiredPermissions[].resourceAppId`; an
+    `AppConfig.yaml` `Dependencies` entry for it plus a rewritten `requiredPermissions` array: each
+    such row's `resourceAppId` → `{{ dependency_refs.<key>.applicationId }}`, **and** its `id` → the
+    resolved permission's `value`/name (from `resourceApplications[appId].permissions[id].name`)
+    instead of the tenant GUID — UC042's Permission Editor keys a dependency scope by value, not
+    GUID (`permissionIdOptions.ts`), so a GUID would render as a ⚠ unrecognised value. A row whose
+    permission the live lookup didn't expose keeps its original `id`; Graph rows are returned
+    unchanged (Graph GUIDs are fixed). Key = the resource's resolved `displayName` squashed to
+    `[A-Za-z0-9]` (matching UC040's own `SampleAPIApp` example), or the raw `appId` when unresolved
+    (no SP in tenant — user's explicit choice) or when that key already belongs to a different
+    `AppName`. Existing `Dependencies` are merged, never overwritten; an entry already pointing at
+    the same `AppName` is reused for the rewrite. `downloadApplicationToProject()` runs this **only
+    when writing a fresh `Application.yaml.j2`** (`!existingTemplates.application`) — it then sets
+    `appConfig.Dependencies` to the merged map and writes `derivation.requiredPermissions`; an
     existing hand-authored template and its `Dependencies` map are both left untouched.
     `applicationPreviewHtml.ts` calls the same function (with `{}` for existing deps) to render
     UC034's read-only **Dependencies** list under the Application section — resolved as `name

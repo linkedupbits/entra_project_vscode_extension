@@ -9,8 +9,8 @@ function perm(resourceAppId: string, id = 'p', type: RequiredPermission['type'] 
   return { resourceAppId, id, type };
 }
 
-function resource(displayName: string): GraphResourceApplication {
-  return { displayName, permissions: {} };
+function resource(displayName: string, permissions: GraphResourceApplication['permissions'] = {}): GraphResourceApplication {
+  return { displayName, permissions };
 }
 
 describe('deriveApplicationDependencies', () => {
@@ -18,12 +18,13 @@ describe('deriveApplicationDependencies', () => {
     const result = deriveApplicationDependencies([perm(GRAPH, 'a'), perm(GRAPH, 'b')], {}, {});
     expect(result.derived).toEqual([]);
     expect(result.dependencies).toEqual({});
-    expect(result.resourceAppIdRewrites).toEqual({});
+    expect(result.requiredPermissions).toEqual([perm(GRAPH, 'a'), perm(GRAPH, 'b')]);
   });
 
   it('ignores blank resourceAppIds', () => {
     const result = deriveApplicationDependencies([perm('')], {}, {});
     expect(result.derived).toEqual([]);
+    expect(result.requiredPermissions).toEqual([perm('')]);
   });
 
   it('derives one dependency per distinct non-Graph resource, keyed by its squashed display name', () => {
@@ -34,18 +35,38 @@ describe('deriveApplicationDependencies', () => {
       { key: 'SampleAPIApp', appName: 'Sample API App', resourceAppId: 'api-1', resolved: true },
     ]);
     expect(result.dependencies).toEqual({ SampleAPIApp: { AppName: 'Sample API App' } });
-    expect(result.resourceAppIdRewrites).toEqual({
-      'api-1': '{{ dependency_refs.SampleAPIApp.applicationId }}',
-    });
   });
 
-  it('keys an unresolved resource by its appId', () => {
-    const result = deriveApplicationDependencies([perm('mystery-api')], {}, {});
+  it('rewrites a recognised dependency row: resourceAppId to a dependency_refs reference, id to the scope value', () => {
+    const resources = {
+      'api-1': resource('Sample API App', { 'scope-guid': { name: 'access_as_user', type: 'Scope' } }),
+    };
+    const result = deriveApplicationDependencies([perm('api-1', 'scope-guid'), perm(GRAPH, 'graph-guid')], resources, {});
+
+    expect(result.requiredPermissions).toEqual([
+      { resourceAppId: '{{ dependency_refs.SampleAPIApp.applicationId }}', id: 'access_as_user', type: 'Scope' },
+      { resourceAppId: GRAPH, id: 'graph-guid', type: 'Scope' },
+    ]);
+  });
+
+  it('keeps the original id when the dependency resource does not expose that permission', () => {
+    const resources = { 'api-1': resource('Sample API App', {}) };
+    const result = deriveApplicationDependencies([perm('api-1', 'unknown-guid')], resources, {});
+
+    expect(result.requiredPermissions).toEqual([
+      { resourceAppId: '{{ dependency_refs.SampleAPIApp.applicationId }}', id: 'unknown-guid', type: 'Scope' },
+    ]);
+  });
+
+  it('keys an unresolved resource by its appId and leaves the permission id untouched', () => {
+    const result = deriveApplicationDependencies([perm('mystery-api', 'some-guid')], {}, {});
     expect(result.derived).toEqual([
       { key: 'mystery-api', appName: 'mystery-api', resourceAppId: 'mystery-api', resolved: false },
     ]);
     expect(result.dependencies).toEqual({ 'mystery-api': { AppName: 'mystery-api' } });
-    expect(result.resourceAppIdRewrites['mystery-api']).toBe('{{ dependency_refs.mystery-api.applicationId }}');
+    expect(result.requiredPermissions).toEqual([
+      { resourceAppId: '{{ dependency_refs.mystery-api.applicationId }}', id: 'some-guid', type: 'Scope' },
+    ]);
   });
 
   it('merges with existing dependencies without overwriting them', () => {
@@ -59,11 +80,14 @@ describe('deriveApplicationDependencies', () => {
 
   it('reuses an existing dependency key that already points at the same application, adding nothing', () => {
     const existing = { my_api: { AppName: 'Sample API App' } };
-    const result = deriveApplicationDependencies([perm('api-1')], { 'api-1': resource('Sample API App') }, existing);
+    const resources = { 'api-1': resource('Sample API App', { 'scope-guid': { name: 'access_as_user', type: 'Scope' } }) };
+    const result = deriveApplicationDependencies([perm('api-1', 'scope-guid')], resources, existing);
 
     expect(result.derived).toEqual([]);
     expect(result.dependencies).toEqual({ my_api: { AppName: 'Sample API App' } });
-    expect(result.resourceAppIdRewrites['api-1']).toBe('{{ dependency_refs.my_api.applicationId }}');
+    expect(result.requiredPermissions).toEqual([
+      { resourceAppId: '{{ dependency_refs.my_api.applicationId }}', id: 'access_as_user', type: 'Scope' },
+    ]);
   });
 
   it('falls back to the appId as the key when the preferred key is already taken by a different application', () => {
@@ -71,6 +95,6 @@ describe('deriveApplicationDependencies', () => {
     const result = deriveApplicationDependencies([perm('api-1')], { 'api-1': resource('Sample API App') }, existing);
 
     expect(result.dependencies['api-1']).toEqual({ AppName: 'Sample API App' });
-    expect(result.resourceAppIdRewrites['api-1']).toBe('{{ dependency_refs.api-1.applicationId }}');
+    expect(result.requiredPermissions[0].resourceAppId).toBe('{{ dependency_refs.api-1.applicationId }}');
   });
 });

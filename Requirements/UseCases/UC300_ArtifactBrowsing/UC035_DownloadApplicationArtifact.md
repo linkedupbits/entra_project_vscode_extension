@@ -144,10 +144,18 @@ preconditions above are met.
      different application.
    * An existing `Dependencies` entry that already points at the same application (by `AppName`) is
      reused rather than duplicated.
-3. Each Required Permission row for such a resource has its `resourceAppId` rewritten to
-   `{{ dependency_refs.<key>.applicationId }}` in the `Application.yaml.j2` being written, so
-   UC042's editor recognises it as a dependency reference rather than flagging it as an unmodelled
-   raw GUID. Microsoft Graph permission rows are left exactly as fetched.
+3. Each Required Permission row for such a resource is rewritten in the `Application.yaml.j2` being
+   written:
+   * its `resourceAppId` becomes `{{ dependency_refs.<key>.applicationId }}`, so UC042's editor
+     recognises it as a dependency reference rather than flagging it as an unmodelled raw GUID;
+   * its `id` becomes the referenced permission's **value** (its name, e.g. `access_as_user`)
+     rather than the tenant permission GUID — a dependency's scope GUID isn't fixed at authoring
+     time, so UC042's Permission Editor keys a dependency scope by its `value`, and a row still
+     holding the GUID would render as an unrecognised ⚠ value. If the resource's live lookup didn't
+     expose that permission, the row keeps its original `id`.
+
+   Microsoft Graph permission rows are left exactly as fetched (Graph's permission GUIDs *are*
+   fixed, and UC042 keys them by GUID).
 4. This never runs when `Application.yaml.j2` already exists — the user maintains that file's
    permissions and the `Dependencies` map by hand in that case.
 
@@ -161,7 +169,8 @@ preconditions above are met.
   automatically-generated tags UC042's Generated tags preview describes.
 * When `Application.yaml.j2` was written fresh, every non-Graph resource it requests permissions
   from is present in `AppConfig.yaml`'s `Dependencies` map and referenced from the permission rows
-  as `{{ dependency_refs.<key>.applicationId }}` (A6).
+  as `{{ dependency_refs.<key>.applicationId }}`, with each such row's `id` holding the permission
+  value rather than the tenant GUID (A6).
 * The **Project** node of the Entra tree reflects the result.
 
 ## Related

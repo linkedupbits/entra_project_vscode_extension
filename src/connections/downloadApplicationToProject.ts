@@ -62,10 +62,12 @@ function stripGeneratedTags(tags: readonly string[], appName: string): string[] 
  *   four tags UC042 generates automatically are never captured as if they were custom ones.
  * - When a fresh `Application.yaml.j2` is written, every non-Graph `resourceAppId` in its Required
  *   Permissions is turned into an `AppConfig.yaml` `Dependencies` entry (merged into any already
- *   there) and the permission row is rewritten to reference it as
- *   `{{ dependency_refs.<key>.applicationId }}` — see `deriveApplicationDependencies()`. Microsoft
- *   Graph permissions are left alone. If `Application.yaml.j2` already exists, its permissions and
- *   the existing `Dependencies` map are both left untouched.
+ *   there) and the permission row is rewritten: its `resourceAppId` becomes
+ *   `{{ dependency_refs.<key>.applicationId }}` and its `id` becomes the resolved permission's
+ *   value/name instead of the tenant GUID, so UC042's Permission Editor renders it (a dependency
+ *   scope is keyed by value, not id — see `deriveApplicationDependencies()`). Microsoft Graph
+ *   permissions are left alone. If `Application.yaml.j2` already exists, its permissions and the
+ *   existing `Dependencies` map are both left untouched.
  *
  * Requires every section of `data` to have loaded successfully — if any of the three Graph calls
  * UC034 makes failed, there is nothing trustworthy to write for that section, so this refuses to
@@ -137,14 +139,7 @@ export async function downloadApplicationToProject(
       );
 
   const applicationFile: ApplicationFields = derivedDependencies
-    ? {
-        ...data.application.value,
-        requiredPermissions: data.application.value.requiredPermissions.map((permission) =>
-          derivedDependencies.resourceAppIdRewrites[permission.resourceAppId]
-            ? { ...permission, resourceAppId: derivedDependencies.resourceAppIdRewrites[permission.resourceAppId] }
-            : permission
-        ),
-      }
+    ? { ...data.application.value, requiredPermissions: derivedDependencies.requiredPermissions }
     : data.application.value;
 
   const files: ApplicationFiles = {
