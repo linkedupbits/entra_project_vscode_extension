@@ -551,17 +551,20 @@ These came out of an explicit planning pass with the user and should not be sile
   `applicationFormLogic.ts`'s now-exported `reservedTagPrefixFor()` (`AppName:`/`Environment:`/
   `BusinessUnit:`) plus an exact match on the bare app name (the fourth generated tag) — without
   this, a downloaded file would immediately fail that same file's own reserved-prefix validation
-  the next time it's opened in UC042 and saved. When appending a new `Environments` entry, its
-  `publisherDomain`/`tenancy_type` are populated from the connection/fetched application (see
-  `tenancyTypeFor()`: `externalId` → `'ciam'`, else `'workforce'`) only if the Service Principal
-  also carries a separate `Environment:` tag (`hasEnvironmentTag()`, presence-only — its value may
-  still be the unresolved `{{Environment}}` placeholder) — otherwise left blank, unchanged from
-  before this enrichment existed. `publisherDomain` itself comes from the raw application object's
-  own Graph `publisherDomain` field, captured by `tenantApplicationPreview.ts` as
-  `ApplicationPreviewData.applicationPublisherDomain` since `ApplicationFields`/UC042 don't model
-  it. The new entry's `Variables` are seeded with the previewed application's redirect URIs
-  (`web_redirectUris`/`publicClient_redirectURIs`/`spa_redirectURIs` array values, each omitted when
-  empty) from the same `ApplicationPreviewData` side fields. Requires all three of UC034's sections
+  the next time it's opened in UC042 and saved. The `Environments` entry for the downloaded
+  environment (matched by `environment_code`) is **create-or-update**, via `upsertEnvironment()`:
+  missing → append a new entry; present → patch it in place. Either way its redirect-URI `Variables`
+  (`web_redirectUris`/`publicClient_redirectURIs`/`spa_redirectURIs` arrays, via
+  `redirectUriVariables()`) are set to the previewed app's current redirect URIs — on an update a
+  category the tenant no longer has is `delete`d from the entry, while the entry's other `Variables`
+  keys and `name`, and every *other* environment, are preserved. `publisherDomain`/`tenancy_type`
+  are populated from the connection/fetched application (see `tenancyTypeFor()`: `externalId` →
+  `'ciam'`, else `'workforce'`) only if the Service Principal also carries a separate `Environment:`
+  tag (`hasEnvironmentTag()`, presence-only — its value may still be the unresolved `{{Environment}}`
+  placeholder) — otherwise blank on create / untouched on update. `publisherDomain` itself comes
+  from the raw application object's own Graph `publisherDomain` field, captured by
+  `tenantApplicationPreview.ts` as `ApplicationPreviewData.applicationPublisherDomain` since
+  `ApplicationFields`/UC042 don't model it. Requires all three of UC034's sections
   to have loaded successfully (`kind: 'ok'`) — refuses
   to download, rather than writing a misleadingly empty file, if any one failed.
   `tenantApplicationIdentity.ts`, `promptForApplicationName.ts`, and

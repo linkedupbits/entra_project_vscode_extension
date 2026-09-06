@@ -52,13 +52,20 @@ preconditions above are met.
    * `AppConfig.yaml`'s `application_name` is set to `<AppName>` only if currently blank.
    * `AppConfig.yaml`'s `business_unit` is set to `<BusinessUnit>` only if currently blank and
      `<BusinessUnit>` is known (it isn't, under A4).
-   * If `<Environment>` is known (it isn't, under A4), an entry is appended to `AppConfig.yaml`'s
-     `Environments` list for it (as both `name` and `environment_code`) only if no entry with that
-     `environment_code` already exists; an existing one is left untouched. See A5 below for how
-     that new entry's `publisherDomain`/`tenancy_type` are populated. The previewed application's
-     redirect URIs are seeded into that new entry's `Variables` as array values (`web_redirectUris`
-     / `publicClient_redirectURIs` / `spa_redirectURIs` — the keys UC042 defines for per-environment
-     redirect URIs), each omitted when the tenant application has none of that category.
+   * If `<Environment>` is known (it isn't, under A4), the `AppConfig.yaml` `Environments` entry
+     whose `environment_code` is `<Environment>` is **created if missing, or updated in place if it
+     already exists** (a new entry uses `<Environment>` as both `name` and `environment_code`):
+     * Its redirect-URI `Variables` — the array-valued keys `web_redirectUris` /
+       `publicClient_redirectURIs` / `spa_redirectURIs` (the keys UC042 defines for per-environment
+       redirect URIs) — are set to the previewed application's current redirect URIs. On an
+       update, a category the tenant application no longer has is *removed* from that environment;
+       the environment's own non-redirect `Variables` keys (custom values, per-environment scope-id
+       variables) are left as they are.
+     * Its `publisherDomain`/`tenancy_type` are populated from the connection/fetched application
+       only per A5 below (the `Environment:` tag signal) — otherwise blank on create, or unchanged
+       on update.
+     * On an update, the entry's `name` is preserved, and every *other* environment in the list is
+       left completely untouched.
    * Each of `Application.yaml.j2`, `FederatedCredentials.yaml.j2`, and `ServicePrincipal.yaml.j2`
      is written with the previewed data **only if that file doesn't already exist**. An existing
      file — which may be a hand-authored Nunjucks template with real `{{ }}` placeholders — is
@@ -115,20 +122,21 @@ preconditions above are met.
    silently, the same as cancelling any other quick input in this extension — no error
    notification, since nothing was requested.
 
-### A5 — Enriching a new Environment entry from the connection
+### A5 — Enriching the Environment entry's publisher domain / tenancy type from the connection
 
-1. `<Environment>` is known (i.e. A4 did not apply) and step 4 is about to append a new
-   `Environments` entry for it, and the Service Principal also carries a separate tag starting
+1. `<Environment>` is known (i.e. A4 did not apply) and step 4 is about to create or update that
+   `Environments` entry, and the Service Principal also carries a separate tag starting
    with `Environment:` (UC042's Generated tags preview's second tag — its value isn't inspected,
    only its presence, since it may still be the literal unresolved `{{Environment}}` placeholder).
-2. The new entry's `publisherDomain` is set from the previewed Application's own Graph
+2. The entry's `publisherDomain` is set from the previewed Application's own Graph
    `publisherDomain` field (fetched as part of UC034's Application call, though not itself part of
    the structured Application section UC042 models), and its `tenancy_type` is set to `ciam` if
    the connection being downloaded from has `tenantKind: 'externalId'`, or `workforce` otherwise.
    This is the one place this use case reads anything from the connection itself, rather than
-   purely from the previewed data or the parsed tag.
-3. If the Service Principal has no `Environment:` tag, the new entry's `publisherDomain` and
-   `tenancy_type` are left blank instead — the original behavior, unchanged when this additional
+   purely from the previewed data or the parsed tag. On an update this overwrites whatever those
+   two fields held before.
+3. If the Service Principal has no `Environment:` tag, `publisherDomain` and
+   `tenancy_type` are left blank on create, or left exactly as they were on update — the original behavior, unchanged when this additional
    signal isn't present.
 
 ### A6 — Deriving dependencies from Required Permissions
@@ -168,10 +176,13 @@ preconditions above are met.
 
 ## Postconditions
 
-* `<artifactsRoot>/Applications/<AppName>/` exists and satisfies UC040's format, with the
-  downloaded environment represented in `AppConfig.yaml`'s `Environments` list, if `<Environment>`
-  was known (A4 not applying).
-* No existing hand-authored file in that folder was overwritten.
+* `<artifactsRoot>/Applications/<AppName>/` exists and satisfies UC040's format. If `<Environment>`
+  was known (A4 not applying), `AppConfig.yaml`'s `Environments` list has exactly one entry for it,
+  with its redirect-URI Variables (and, per A5, `publisherDomain`/`tenancy_type`) reflecting the
+  tenant application as previewed; any other environment in that list is unchanged.
+* No existing hand-authored `.yaml.j2` template file in that folder was overwritten. (`AppConfig.yaml`
+  is always re-serialized — it is generated by this form, not a hand-authored template — so the
+  redirect-URI Variables of the downloaded environment's entry are updated in place there.)
 * `ServicePrincipal.yaml.j2`'s `tags` (when written) never contain any of the four
   automatically-generated tags UC042's Generated tags preview describes.
 * When `Application.yaml.j2` was written fresh, every non-Graph resource it requests permissions

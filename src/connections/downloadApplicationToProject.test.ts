@@ -381,7 +381,7 @@ describe('downloadApplicationToProject', () => {
     expect(savedFiles.appConfig.business_unit).toBe('Hand-set Unit');
   });
 
-  it('does not duplicate an Environments entry that already has this environment_code', async () => {
+  it('updates the existing Environments entry with this environment_code in place (no duplicate), leaving fields it has nothing new for alone', async () => {
     vi.mocked(getApplicationsRootUri).mockReturnValue(rootUri as never);
     const existingAppConfig: AppConfig = {
       ...emptyAppConfig(),
@@ -397,11 +397,137 @@ describe('downloadApplicationToProject', () => {
       servicePrincipal: emptyServicePrincipalFields(),
     });
 
+    // okData() has no redirect URIs and no Environment: tag, so nothing to change here.
     await downloadApplicationToProject(store, identity, okData(), connection);
 
     const [, savedFiles] = save.mock.calls[0];
     expect(savedFiles.appConfig.Environments).toEqual([
       { name: 'Dev', publisherDomain: 'contoso-dev.onmicrosoft.com', tenancy_type: 'ciam', environment_code: 'dev', Variables: {} },
+    ]);
+  });
+
+  it("updates an existing environment's redirect-URI Variables from the tenant app, preserving its name, custom Variables, and other environments", async () => {
+    vi.mocked(getApplicationsRootUri).mockReturnValue(rootUri as never);
+    const existingAppConfig: AppConfig = {
+      ...emptyAppConfig(),
+      application_name: 'sample-web-app',
+      Environments: [
+        { name: 'Test', publisherDomain: 't.example.com', tenancy_type: 'workforce', environment_code: 'test', Variables: {} },
+        {
+          name: 'Development',
+          publisherDomain: 'd.example.com',
+          tenancy_type: 'workforce',
+          environment_code: 'dev',
+          Variables: {
+            owner: 'team@example.com',
+            web_redirectUris: ['https://old.example.com/signin-oidc'],
+          },
+        },
+      ],
+    };
+    const { store, save } = fakeStore({
+      appConfig: existingAppConfig,
+      application: emptyApplicationFields(),
+      federatedCredentials: [],
+      servicePrincipal: emptyServicePrincipalFields(),
+    });
+
+    await downloadApplicationToProject(
+      store,
+      identity,
+      okData({ webRedirectUris: ['https://dev.example.com/signin-oidc'], spaRedirectUris: ['https://dev.example.com'] }),
+      connection
+    );
+
+    const [, savedFiles] = save.mock.calls[0];
+    expect(savedFiles.appConfig.Environments).toEqual([
+      { name: 'Test', publisherDomain: 't.example.com', tenancy_type: 'workforce', environment_code: 'test', Variables: {} },
+      {
+        name: 'Development',
+        publisherDomain: 'd.example.com',
+        tenancy_type: 'workforce',
+        environment_code: 'dev',
+        Variables: {
+          owner: 'team@example.com',
+          web_redirectUris: ['https://dev.example.com/signin-oidc'],
+          spa_redirectURIs: ['https://dev.example.com'],
+        },
+      },
+    ]);
+  });
+
+  it('removes a redirect-URI category from an existing environment when the tenant application no longer has it', async () => {
+    vi.mocked(getApplicationsRootUri).mockReturnValue(rootUri as never);
+    const existingAppConfig: AppConfig = {
+      ...emptyAppConfig(),
+      application_name: 'sample-web-app',
+      Environments: [
+        {
+          name: 'dev',
+          publisherDomain: '',
+          tenancy_type: '',
+          environment_code: 'dev',
+          Variables: { web_redirectUris: ['https://gone.example.com'], publicClient_redirectURIs: ['x'] },
+        },
+      ],
+    };
+    const { store, save } = fakeStore({
+      appConfig: existingAppConfig,
+      application: emptyApplicationFields(),
+      federatedCredentials: [],
+      servicePrincipal: emptyServicePrincipalFields(),
+    });
+
+    await downloadApplicationToProject(
+      store,
+      identity,
+      okData({ publicClientRedirectUris: ['https://login.microsoftonline.com/common/oauth2/nativeclient'] }),
+      connection
+    );
+
+    const [, savedFiles] = save.mock.calls[0];
+    expect(savedFiles.appConfig.Environments[0].Variables).toEqual({
+      publicClient_redirectURIs: ['https://login.microsoftonline.com/common/oauth2/nativeclient'],
+    });
+  });
+
+  it('updates an existing environment\'s publisherDomain/tenancy_type when the Service Principal carries an Environment: tag', async () => {
+    vi.mocked(getApplicationsRootUri).mockReturnValue(rootUri as never);
+    const existingAppConfig: AppConfig = {
+      ...emptyAppConfig(),
+      application_name: 'sample-web-app',
+      Environments: [
+        { name: 'Dev', publisherDomain: 'stale.example.com', tenancy_type: 'workforce', environment_code: 'dev', Variables: {} },
+      ],
+    };
+    const { store, save } = fakeStore({
+      appConfig: existingAppConfig,
+      application: emptyApplicationFields(),
+      federatedCredentials: [],
+      servicePrincipal: emptyServicePrincipalFields(),
+    });
+    const externalIdConnection: Connection = { ...connection, tenantKind: 'externalId' };
+
+    await downloadApplicationToProject(
+      store,
+      identity,
+      okData({
+        applicationPublisherDomain: 'contoso.onmicrosoft.com',
+        servicePrincipal: {
+          kind: 'ok',
+          value: {
+            appId: 'app-1',
+            appRoleAssignmentRequired: false,
+            tags: ['AppName:dev_Customer Experience_sample-web-app', 'Environment:dev'],
+          },
+        },
+      }),
+      externalIdConnection
+    );
+
+    const [, savedFiles] = save.mock.calls[0];
+    expect(savedFiles.appConfig.Environments).toEqual([
+      { name: 'Dev', publisherDomain: 'contoso.onmicrosoft.com', tenancy_type: 'ciam', environment_code: 'dev', Variables: {} },
     ]);
   });
 

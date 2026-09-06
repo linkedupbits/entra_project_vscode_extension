@@ -4,6 +4,7 @@ import {
   ApplicationFields,
   ApplicationFiles,
   ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS,
+  EnvironmentEntry,
   ServicePrincipalFields,
 } from '../applications/types';
 import { reservedTagPrefixFor } from '../applications/applicationFormLogic';
@@ -37,6 +38,82 @@ function stripGeneratedTags(tags: readonly string[], appName: string): string[] 
 }
 
 /**
+ * The previewed tenant application's redirect URIs as the three `EnvironmentEntry.Variables` array
+ * keys UC042 uses — each key omitted entirely when the tenant application has none of that category
+ * (matching UC042's "an empty list writes no key").
+ */
+function redirectUriVariables(data: ApplicationPreviewData): Record<string, string[]> {
+  const vars: Record<string, string[]> = {};
+  if (data.webRedirectUris.length > 0) {
+    vars[ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS.web] = data.webRedirectUris;
+  }
+  if (data.publicClientRedirectUris.length > 0) {
+    vars[ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS.publicClient] = data.publicClientRedirectUris;
+  }
+  if (data.spaRedirectUris.length > 0) {
+    vars[ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS.spa] = data.spaRedirectUris;
+  }
+  return vars;
+}
+
+/**
+ * UC035 — `create-or-update` for the one `Environments` entry matching the connected application's
+ * environment (matched by `environment_code`):
+ * - **create**: append a new entry (`name`/`environment_code` = the environment), its
+ *   `publisherDomain`/`tenancy_type` from the connection only if `enrich` (the `Environment:` tag
+ *   signal — see UC035 A5), its `Variables` the previewed redirect URIs.
+ * - **update**: overwrite that entry's redirect-URI Variables with the previewed ones (a category
+ *   the tenant no longer has is *removed*), and — only if `enrich` — its `publisherDomain`/
+ *   `tenancy_type`. Every other field (`name`, custom `Variables` keys, per-environment scope-id
+ *   variables) is preserved.
+ * Environments other than this one are never touched.
+ */
+function upsertEnvironment(
+  existing: readonly EnvironmentEntry[],
+  environment: string,
+  redirectVariables: Record<string, string[]>,
+  enrich: boolean,
+  publisherDomain: string,
+  tenancyType: string
+): EnvironmentEntry[] {
+  const redirectKeys = Object.values(ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS) as string[];
+  const index = existing.findIndex((entry) => entry.environment_code === environment);
+
+  if (index === -1) {
+    return [
+      ...existing,
+      {
+        name: environment,
+        publisherDomain: enrich ? publisherDomain : '',
+        tenancy_type: enrich ? tenancyType : '',
+        environment_code: environment,
+        Variables: { ...redirectVariables },
+      },
+    ];
+  }
+
+  return existing.map((entry, i) => {
+    if (i !== index) {
+      return entry;
+    }
+    const variables: Record<string, string | string[]> = { ...entry.Variables };
+    for (const key of redirectKeys) {
+      if (redirectVariables[key]) {
+        variables[key] = redirectVariables[key];
+      } else {
+        delete variables[key];
+      }
+    }
+    return {
+      ...entry,
+      publisherDomain: enrich ? publisherDomain : entry.publisherDomain,
+      tenancy_type: enrich ? tenancyType : entry.tenancy_type,
+      Variables: variables,
+    };
+  });
+}
+
+/**
  * UC035 — captures a tenant application's live Application/FederatedCredentials/ServicePrincipal
  * details into the local application-definition folder UC040 already defines for `identity.appName`
  * (`<artifactsRoot>/Applications/<appName>/`), rather than a flat downloaded-artifact snapshot
@@ -48,14 +125,16 @@ function stripGeneratedTags(tags: readonly string[], appName: string): string[] 
  * capture produces:
  * - `AppConfig.yaml`'s `business_unit` is filled in only if currently blank, and only if
  *   `identity.businessUnit` was actually supplied.
- * - An `Environments` entry for `identity.environment` is added only if none with that
- *   `environment_code` already exists; an existing one is left untouched. Skipped entirely if
- *   `identity.environment` is absent (UC035 A4's fallback wizard never collects one). When adding
- *   one, `publisherDomain`/`tenancy_type` are filled in from `connection`/the fetched application
- *   only if the Service Principal also carries a separate `Environment:` tag (see UC035 A5) —
- *   otherwise left blank, the previous behavior. The tenant application's redirect URIs are seeded
- *   into the new entry's `Variables` (as `web_redirectUris` / `publicClient_redirectURIs` /
- *   `spa_redirectURIs` arrays — UC042 models redirect URIs per environment), each omitted if empty.
+ * - The `Environments` entry for `identity.environment` (matched by `environment_code`) is
+ *   **created if missing, updated if present** — see `upsertEnvironment()`. Either way its
+ *   redirect-URI `Variables` (`web_redirectUris` / `publicClient_redirectURIs` / `spa_redirectURIs`
+ *   arrays — UC042 models redirect URIs per environment) are set to the tenant application's
+ *   current redirect URIs (a category the tenant no longer has is dropped on update); its
+ *   `publisherDomain`/`tenancy_type` are set from `connection`/the fetched application only if the
+ *   Service Principal also carries a separate `Environment:` tag (see UC035 A5) — otherwise left
+ *   blank on create, or left as-is on update. An existing entry's `name`, its other `Variables`
+ *   keys, and every *other* environment are all preserved. Skipped entirely if
+ *   `identity.environment` is absent (UC035 A4's fallback wizard never collects one).
  * - Each of the three `.yaml.j2` template files is written only if it doesn't already exist
  *   (`ApplicationStore.existingTemplateFiles()`); one already present is never touched. The
  *   Service Principal's tags are filtered (`stripGeneratedTags()`) before being written, so the
@@ -95,32 +174,17 @@ export async function downloadApplicationToProject(
   ]);
 
   const environment = identity.environment;
-  const hasEnvironment =
-    !environment || existing.appConfig.Environments.some((e) => e.environment_code === environment);
   const enrichFromConnection = hasEnvironmentTag(data.servicePrincipal.value.tags);
-  const newEnvironmentVariables: Record<string, string | string[]> = {};
-  if (data.webRedirectUris.length > 0) {
-    newEnvironmentVariables[ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS.web] = data.webRedirectUris;
-  }
-  if (data.publicClientRedirectUris.length > 0) {
-    newEnvironmentVariables[ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS.publicClient] = data.publicClientRedirectUris;
-  }
-  if (data.spaRedirectUris.length > 0) {
-    newEnvironmentVariables[ENVIRONMENT_REDIRECT_URI_VARIABLE_KEYS.spa] = data.spaRedirectUris;
-  }
-  const environments =
-    !environment || hasEnvironment
-      ? existing.appConfig.Environments
-      : [
-          ...existing.appConfig.Environments,
-          {
-            name: environment,
-            publisherDomain: enrichFromConnection ? data.applicationPublisherDomain : '',
-            tenancy_type: enrichFromConnection ? tenancyTypeFor(connection) : '',
-            environment_code: environment,
-            Variables: newEnvironmentVariables,
-          },
-        ];
+  const environments = environment
+    ? upsertEnvironment(
+        existing.appConfig.Environments,
+        environment,
+        redirectUriVariables(data),
+        enrichFromConnection,
+        data.applicationPublisherDomain,
+        tenancyTypeFor(connection)
+      )
+    : existing.appConfig.Environments;
 
   const servicePrincipal: ServicePrincipalFields = {
     ...data.servicePrincipal.value,
