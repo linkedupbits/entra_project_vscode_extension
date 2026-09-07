@@ -1,32 +1,59 @@
-displayName: Sample API ({{ name }})
-signInAudience: AzureADMyOrg
+displayName: "Sample API"
+signInAudience: "AzureADMyOrg"
 web:
   redirectUris: [{% for item in (environment.Variables.web_redirectUris | default([])) %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+  implicitGrantSettings:
+    enableAccessTokenIssuance: false
+    enableIdTokenIssuance: false
   redirectUriSettings: [{% for item in (environment.Variables.web_redirectUris | default([])) %}{"uri": "{{ item }}", "index": null}{% if not loop.last %}, {% endif %}{% endfor %}]
 publicClient:
-  redirectUris: [{% for item in (environment.Variables.publicClient_redirectURIs | default([])) %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+  redirectUris: []
 spa:
   redirectUris: [{% for item in (environment.Variables.spa_redirectURIs | default([])) %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]
-requiredResourceAccess:
-  - resourceAppId: 00000003-0000-0000-c000-000000000000
-    resourceAccess:
-      - id: df021288-bdef-4463-88db-98f22de89214
-        type: Role
+id: "sample-api-id"
+appId: "sample-api-client-id"
+createdDateTime: "2026-01-10T00:00:00Z"
+description: "Sample Entra API application"
+identifierUris:
+  - "api://<appId>"
+notes: "Sample API app"
+publisherDomain: "<Will be replaced by the python transform>"
+tags:
+  - "SampleAPI"
+addIns: []
 api:
+  knownClientApplications: []
+  requestedAccessTokenVersion: 2
   oauth2PermissionScopes:
     - id: "{{ environment.Variables.MyScopeId }}"
-      adminConsentDescription: sdsd
-      adminConsentDisplayName: sdsds
+      adminConsentDescription: "Allows the app to access the API on behalf of the signed-in user."
+      adminConsentDisplayName: "Access API"
       isEnabled: true
-      type: Admin
-      userConsentDescription: ""
-      userConsentDisplayName: ""
-      value: somevalue.else
+      type: "Admin"
+      userConsentDescription: "Allows the app to access the API on your behalf."
+      userConsentDisplayName: "Access API"
+      value: "somevalue.else"
     - id: "{{ environment.Variables.SecondScope }}"
-      adminConsentDescription: dsdfsdf
-      adminConsentDisplayName: sdfsdsgsf
+      adminConsentDescription: "Allows the app to access additional API operations."
+      adminConsentDisplayName: "Access additional API operations"
       isEnabled: true
-      type: Admin
-      userConsentDescription: sdfsdf
-      userConsentDisplayName: sdfsfd
-      value: DiffernetValue
+      type: "Admin"
+      userConsentDescription: "Allows the app to access additional API operations on your behalf."
+      userConsentDisplayName: "Access additional API operations"
+      value: "DiffernetValue"
+  preAuthorizedApplications: []
+appRoles: []
+keyCredentials: []
+optionalClaims:
+  accessToken: []
+  idToken: []
+  saml2Token: []
+parentalControlSettings:
+  countriesBlockedForMinors: []
+  legalAgeGroupRule: "Allow"
+passwordCredentials: []
+requiredResourceAccess:
+  - resourceAppId: "00000003-0000-0000-c000-000000000000"
+    resourceAccess:
+      - id: "df021288-bdef-4463-88db-98f22de89214"
+        type: "Role"

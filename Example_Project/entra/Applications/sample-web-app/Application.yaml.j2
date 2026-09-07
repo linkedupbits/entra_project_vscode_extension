@@ -1,20 +1,75 @@
-displayName: Sample Web App ({{ name }})
-signInAudience: AzureADMyOrg
-web:
-  redirectUris: [{% for item in (environment.Variables.web_redirectUris | default([])) %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]
-  redirectUriSettings: [{% for item in (environment.Variables.web_redirectUris | default([])) %}{"uri": "{{ item }}", "index": null}{% if not loop.last %}, {% endif %}{% endfor %}]
+id: "sample-web-app-id"
+appId: "sample-web-app-client-id"
+createdDateTime: "2026-01-15T00:00:00Z"
+displayName: "Sample Web App"
+description: "Sample Entra web application"
+identifierUris:
+  - "api://<appId>"
+notes: "Sample web app"
+publisherDomain: "<Will be replaced by the python transform>"
+signInAudience: "AzureADMyOrg"
+tags:
+  - "SampleWebApp"
+addIns: []
+api:
+  knownClientApplications: []
+  requestedAccessTokenVersion: 2
+  oauth2PermissionScopes:
+    - adminConsentDescription: "Allows app to read customer data"
+      value: "Data.read"
+      isEnabled: true
+      adminConsentDisplayName: "Read customer data"
+      type: "Admin"
+      userConsentDescription: null
+      id: "{{ environment.Variables.oauth2PermissionScopes_Data_read_id }}"
+      userConsentDisplayName: null
+  preAuthorizedApplications:
+    - appId: "{{ dependency_refs.SampleAPIApp.applicationId }}"
+      delegatedPermissionIds:
+        - "Data.read"
+appRoles: []
+keyCredentials: []
+optionalClaims:
+  accessToken:
+    - additionalProperties: []
+      essential: false
+      name: "email"
+      source: null
+  idToken:
+    - additionalProperties: []
+      essential: false
+      name: "login_hint"
+      source: null
+  saml2Token: []
+parentalControlSettings:
+  countriesBlockedForMinors: []
+  legalAgeGroupRule: "Allow"
+passwordCredentials:
+  - customKeyIdentifier: null
+    hint: "RAA"
+    startDateTime: "2026-01-15T00:00:00Z"
+    keyId: "11111111-1111-1111-1111-111111111111"
+    endDateTime: "2026-07-15T00:00:00Z"
+    secretText: null
+    displayName: "PublicClient"
 publicClient:
-  redirectUris: [{% for item in (environment.Variables.publicClient_redirectURIs | default([])) %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]
-spa:
-  redirectUris: [{% for item in (environment.Variables.spa_redirectURIs | default([])) %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+  redirectUris: []
 requiredResourceAccess:
-  - resourceAppId: 00000003-0000-0000-c000-000000000000
+  - resourceAppId: "00000003-0000-0000-c000-000000000000"
     resourceAccess:
-      - id: e1fe6dd8-ba31-4d61-89e7-88639da4683d
-        type: Scope
+      - id: "e1fe6dd8-ba31-4d61-89e7-88639da4683d"
+        type: "Scope"
   - resourceAppId: "{{ dependency_refs.SampleAPIApp.applicationId }}"
     resourceAccess:
-      - id: somevalue.else
-        type: Scope
-      - id: DiffernetValue
-        type: Scope
+      - id: "somevalue.else"
+        type: "Scope"
+      - id: "DiffernetValue"
+        type: "Scope"
+web:
+  redirectUris: [{% for item in (environment.Variables.web_redirectUris | default([])) %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+  implicitGrantSettings:
+    enableAccessTokenIssuance: false
+    enableIdTokenIssuance: false
+  redirectUriSettings: [{% for item in (environment.Variables.web_redirectUris | default([])) %}{"uri": "{{ item }}", "index": null}{% if not loop.last %}, {% endif %}{% endfor %}]
+spa:
+  redirectUris: [{% for item in (environment.Variables.spa_redirectURIs | default([])) %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]

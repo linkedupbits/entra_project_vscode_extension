@@ -1,5 +1,23 @@
+createdDateTime: "2026-01-10T00:00:00Z"
+id: "sample-api-sp-id"
+accountEnabled: true
+addIns: []
+alternativeNames: []
+appDisplayName: "Sample API"
 appId: "{{ application.appId }}"
+appOwnerOrganizationId: ""
 appRoleAssignmentRequired: true
+appRoles: []
+displayName: "Sample API"
+keyCredentials: []
+notificationEmailAddresses: []
+oauth2PermissionScopes: []
+passwordCredentials: []
 replyUrls: [{% for item in (environment.Variables.web_redirectUris | default([])) + (environment.Variables.publicClient_redirectURIs | default([])) + (environment.Variables.spa_redirectURIs | default([])) %}"{{ item }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+resourceSpecificApplicationPermissions: []
+servicePrincipalNames:
+  - "{{ application.appId }}"
+servicePrincipalType: "Application"
+signInAudience: "AzureADMyOrg"
 tags:
-  - WindowsAzureActiveDirectoryIntegratedApp
+  - "WindowsAzureActiveDirectoryIntegratedApp"
